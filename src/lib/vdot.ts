@@ -46,8 +46,8 @@ export function predictRaceTime(vdot: number, distanceMeters: number): number {
     const mid = (lo + hi) / 2;
     const v = calculateVDOT(distanceMeters, mid);
     if (Math.abs(v - vdot) < 0.001) return mid;
-    if (v > vdot) hi = mid; // too fast
-    else lo = mid; // too slow
+    if (v > vdot) lo = mid; // VDOT too high = time too short = need slower (longer time)
+    else hi = mid; // VDOT too low = time too long = need faster (shorter time)
   }
 
   return (lo + hi) / 2;
