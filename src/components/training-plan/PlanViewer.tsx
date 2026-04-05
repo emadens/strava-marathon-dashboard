@@ -287,6 +287,8 @@ export function PlanViewer({ weeks, activities = [], onUpdateMatch }: PlanViewer
                   const match = getMatch(wi, si, s);
                   const pickerKey = `${wi}-${si}`;
                   const dayLabel = s.dayOfWeek.charAt(0).toUpperCase() + s.dayOfWeek.slice(1, 3);
+                  const weekData = weeks[wi] as TrainingWeek & { dateRange?: string };
+                  const plannedDate = weekData.dateRange ? getPlannedDate(weekData.dateRange, s.dayOfWeek) : null;
 
                   return (
                     <div key={rawSi}>
@@ -294,8 +296,13 @@ export function PlanViewer({ weeks, activities = [], onUpdateMatch }: PlanViewer
                         {/* Color dot */}
                         <div className="w-3 h-3 rounded-sm shrink-0" style={{ background: color.dot }} />
 
-                        {/* Day */}
-                        <span className="text-sm text-muted w-8 font-medium">{dayLabel}</span>
+                        {/* Day + date */}
+                        <div className="w-12 shrink-0">
+                          <div className="text-sm text-muted font-medium">{dayLabel}</div>
+                          {plannedDate && (
+                            <div className="text-[0.6rem] text-muted/50 font-mono">{plannedDate.getDate()}/{plannedDate.getMonth() + 1}</div>
+                          )}
+                        </div>
 
                         {/* Session info */}
                         <div className="flex-1">
