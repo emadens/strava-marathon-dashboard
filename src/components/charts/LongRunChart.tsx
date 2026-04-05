@@ -35,7 +35,7 @@ export function LongRunChart({ activities }: { activities: StravaActivity[] }) {
     <Card className="col-span-6 max-lg:col-span-12">
       <div className="font-display text-base tracking-wide mb-0.5">Progressione Long Run</div>
       <div className="text-[0.72rem] text-muted mb-5">distanza uscite lunghe (&gt;15km)</div>
-      <Line data={data} options={getChartOptions({ showLegend: false }) as Parameters<typeof Line>[0]['options']} height={220} />
+      <Line data={data} options={getChartOptions({ showLegend: false, showDataLabels: true, dataLabelFormatter: (v: number) => v > 0 ? v.toFixed(1) : '' }) as Parameters<typeof Line>[0]['options']} height={220} />
     </Card>
   );
 }

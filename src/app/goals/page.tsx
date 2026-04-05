@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 import { Header } from '@/components/layout/Header';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { GoalCard } from '@/components/goals/GoalCard';
@@ -32,6 +32,55 @@ export default function GoalsPage() {
   const totalKm = activities.reduce((s, a) => s + a.distance / 1000, 0);
 
   const longestRun = Math.max(0, ...activities.map(a => a.distance / 1000));
+
+  // Compute weekly averages from last 8 weeks for trend analysis
+  const weeklyStats = useMemo(() => {
+    const weeks: Record<string, { km: number; longestRun: number; count: number }> = {};
+    activities.forEach(a => {
+      const d = new Date(a.start_date);
+      const monday = new Date(d);
+      monday.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+      const key = monday.toISOString().slice(0, 10);
+      if (!weeks[key]) weeks[key] = { km: 0, longestRun: 0, count: 0 };
+      weeks[key].km += a.distance / 1000;
+      weeks[key].longestRun = Math.max(weeks[key].longestRun, a.distance / 1000);
+      weeks[key].count++;
+    });
+    const sorted = Object.entries(weeks).sort((a, b) => b[0].localeCompare(a[0]));
+    const last8 = sorted.slice(0, 8);
+    const avgKmPerWeek = last8.length ? last8.reduce((s, [, w]) => s + w.km, 0) / last8.length : 0;
+    const avgLongRun = last8.length ? last8.reduce((s, [, w]) => s + w.longestRun, 0) / last8.length : 0;
+    const avgRunsPerWeek = last8.length ? last8.reduce((s, [, w]) => s + w.count, 0) / last8.length : 0;
+    return { avgKmPerWeek, avgLongRun, avgRunsPerWeek, weekCount: last8.length };
+  }, [activities]);
+
+  const getTrendForGoal = (type: GoalType, target: number) => {
+    const current = getCurrentForGoal(type);
+    const remaining = Math.max(0, target - current);
+
+    switch (type) {
+      case 'weekly_km': {
+        return {
+          weeklyAvg: weeklyStats.avgKmPerWeek,
+          weeksToTarget: weeklyStats.avgKmPerWeek > 0 ? remaining / weeklyStats.avgKmPerWeek : null,
+          projectedDate: null,
+        };
+      }
+      case 'long_run_target': {
+        // Estimate: longest run increases ~1-2km/week on average
+        const weeklyIncrease = weeklyStats.avgLongRun > 0 ? 1.5 : 0;
+        const weeksNeeded = weeklyIncrease > 0 ? remaining / weeklyIncrease : null;
+        const projDate = weeksNeeded ? new Date(Date.now() + weeksNeeded * 7 * 24 * 60 * 60 * 1000) : null;
+        return {
+          weeklyAvg: weeklyStats.avgLongRun,
+          weeksToTarget: weeksNeeded,
+          projectedDate: projDate ? projDate.toLocaleDateString('it', { day: '2-digit', month: 'short' }) : null,
+        };
+      }
+      default:
+        return { weeklyAvg: 0, weeksToTarget: null, projectedDate: null };
+    }
+  };
 
   const getCurrentForGoal = (type: GoalType): number => {
     switch (type) {
@@ -155,6 +204,7 @@ export default function GoalsPage() {
                     key={g.id}
                     goal={g}
                     current={getCurrentForGoal(g.type)}
+                    trend={getTrendForGoal(g.type, g.target)}
                     onRemove={removeGoal}
                   />
                 ))}

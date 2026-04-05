@@ -41,7 +41,16 @@ export function PaceTrendChart({ activities }: { activities: StravaActivity[] })
         options={{
           responsive: true,
           animation: { duration: 600 },
-          plugins: { legend: { display: false } },
+          plugins: {
+            legend: { display: false },
+            datalabels: {
+              color: '#999',
+              anchor: 'end' as const,
+              align: 'top' as const,
+              font: { size: 9, family: 'DM Mono' },
+              formatter: (v: number) => v > 0 ? fmtPace(v * 60) : '',
+            },
+          },
           scales: {
             y: {
               reverse: true,

@@ -42,7 +42,7 @@ export function TrainingLoadChart({ activities }: { activities: StravaActivity[]
     <Card className="col-span-4 max-lg:col-span-12">
       <div className="font-display text-base tracking-wide mb-0.5">Carico allenamento</div>
       <div className="text-[0.72rem] text-muted mb-5">TSS stimato (settimane)</div>
-      <Bar data={data} options={getChartOptions({ showLegend: false }) as Parameters<typeof Bar>[0]['options']} height={220} />
+      <Bar data={data} options={getChartOptions({ showLegend: false, showDataLabels: true, dataLabelFormatter: (v: number) => v > 0 ? String(Math.round(v)) : '' }) as Parameters<typeof Bar>[0]['options']} height={220} />
     </Card>
   );
 }

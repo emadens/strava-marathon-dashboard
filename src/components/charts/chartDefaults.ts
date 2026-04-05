@@ -1,6 +1,16 @@
 import type { ChartOptions } from 'chart.js';
+import ChartDataLabels from 'chartjs-plugin-datalabels';
+import { Chart as ChartJS } from 'chart.js';
 
-export function getChartOptions(opts: { yLabel?: string; showLegend?: boolean } = {}): ChartOptions {
+// Register datalabels plugin globally
+ChartJS.register(ChartDataLabels);
+
+export function getChartOptions(opts: {
+  yLabel?: string;
+  showLegend?: boolean;
+  showDataLabels?: boolean;
+  dataLabelFormatter?: (value: number) => string;
+} = {}): ChartOptions {
   return {
     responsive: true,
     animation: { duration: 600 },
@@ -15,6 +25,13 @@ export function getChartOptions(opts: { yLabel?: string; showLegend?: boolean } 
         titleFont: { family: 'DM Sans', size: 12 },
         bodyFont: { family: 'DM Mono', size: 11 },
       },
+      datalabels: opts.showDataLabels !== false ? {
+        color: '#999',
+        anchor: 'end' as const,
+        align: 'top' as const,
+        font: { size: 10, family: 'DM Mono' },
+        formatter: opts.dataLabelFormatter || ((v: number) => v > 0 ? v : ''),
+      } : { display: false },
     },
     scales: {
       y: {

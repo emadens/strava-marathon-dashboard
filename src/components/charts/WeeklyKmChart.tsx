@@ -39,7 +39,7 @@ export function WeeklyKmChart({ activities }: { activities: StravaActivity[] }) 
     <Card className="col-span-8 max-lg:col-span-12">
       <div className="font-display text-base tracking-wide mb-0.5">Chilometraggio settimanale</div>
       <div className="text-[0.72rem] text-muted mb-5">km per settimana nel periodo selezionato</div>
-      <Bar data={data} options={getChartOptions({ showLegend: false }) as Parameters<typeof Bar>[0]['options']} height={200} />
+      <Bar data={data} options={getChartOptions({ showLegend: false, showDataLabels: true, dataLabelFormatter: (v: number) => v > 0 ? v.toFixed(1) : '' }) as Parameters<typeof Bar>[0]['options']} height={200} />
     </Card>
   );
 }

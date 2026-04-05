@@ -41,6 +41,16 @@ export function ActivityTypesChart({ activities }: { activities: StravaActivity[
           plugins: {
             legend: { display: true, position: 'bottom', labels: { color: '#666', font: { size: 11, family: 'DM Mono' }, padding: 12 } },
             tooltip: { callbacks: { label: (c) => ` ${c.label}: ${c.raw} attivita` } },
+            datalabels: {
+              color: '#fff',
+              font: { size: 11, family: 'DM Mono', weight: 'bold' as const },
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              formatter: (value: number, ctx: any) => {
+                const total = (ctx.chart.data.datasets[0].data as number[]).reduce((a: number, b: number) => a + b, 0);
+                const pct = ((value / total) * 100).toFixed(0);
+                return Number(pct) > 5 ? `${pct}%` : '';
+              },
+            },
           },
         }}
         height={200}

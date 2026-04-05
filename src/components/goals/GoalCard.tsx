@@ -1,17 +1,21 @@
 'use client';
 
+import { useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import type { Goal } from '@/types/goals';
 
 interface GoalCardProps {
   goal: Goal;
   current: number;
+  trend: { weeklyAvg: number; weeksToTarget: number | null; projectedDate: string | null };
   onRemove: (id: string) => void;
 }
 
-export function GoalCard({ goal, current, onRemove }: GoalCardProps) {
+export function GoalCard({ goal, current, trend, onRemove }: GoalCardProps) {
+  const [showMethod, setShowMethod] = useState(false);
   const pct = Math.min(100, (current / goal.target) * 100);
   const isComplete = pct >= 100;
+  const remaining = Math.max(0, goal.target - current);
 
   const labelMap: Record<string, string> = {
     weekly_km: 'Km settimanali',
@@ -42,13 +46,13 @@ export function GoalCard({ goal, current, onRemove }: GoalCardProps) {
         </button>
       </div>
 
-      <div className="flex items-end gap-2 mb-3">
+      <div className="flex items-end gap-2 mb-1">
         <span className="font-display text-3xl leading-none">{current.toFixed(1)}</span>
         <span className="text-muted text-sm mb-0.5">/ {goal.target} {unitMap[goal.type]}</span>
       </div>
 
       {/* Progress bar */}
-      <div className="w-full bg-surface2 rounded-full h-2 overflow-hidden">
+      <div className="w-full bg-surface2 rounded-full h-2 overflow-hidden mb-1">
         <div
           className="h-full rounded-full transition-all duration-700 ease-out"
           style={{
@@ -63,8 +67,69 @@ export function GoalCard({ goal, current, onRemove }: GoalCardProps) {
           }}
         />
       </div>
-      <div className="text-right text-[0.65rem] text-muted font-mono mt-1">
+      <div className="text-right text-[0.65rem] text-muted font-mono">
         {pct.toFixed(0)}%
+      </div>
+
+      {/* Projection / Trend */}
+      <div className="mt-3 pt-3 border-t border-border/50 space-y-1">
+        {isComplete ? (
+          <div className="text-xs text-green font-medium">Obiettivo raggiunto!</div>
+        ) : (
+          <>
+            <div className="text-[0.65rem] text-muted font-mono">
+              Media: <span className="text-text">{trend.weeklyAvg.toFixed(1)}</span> {unitMap[goal.type]}/sett
+            </div>
+            <div className="text-[0.65rem] text-muted font-mono">
+              Mancano: <span className="text-text">{remaining.toFixed(1)}</span> {unitMap[goal.type]}
+            </div>
+            {trend.weeksToTarget !== null && trend.weeksToTarget > 0 && goal.type === 'weekly_km' ? (
+              <div className="text-[0.65rem] font-mono">
+                {trend.weeklyAvg >= goal.target ? (
+                  <span className="text-green">Ritmo on track — raggiungi il target ogni settimana</span>
+                ) : (
+                  <span className="text-yellow">Servono <span className="text-text">{(goal.target - trend.weeklyAvg).toFixed(1)}</span> km/sett in piu</span>
+                )}
+              </div>
+            ) : trend.weeksToTarget !== null && trend.weeksToTarget > 0 ? (
+              <div className="text-[0.65rem] font-mono">
+                Stima raggiungimento: <span className="text-accent">{trend.projectedDate || `~${Math.ceil(trend.weeksToTarget)} sett`}</span>
+              </div>
+            ) : null}
+
+            {/* How it's calculated - collapsible */}
+            <button
+              onClick={() => setShowMethod(!showMethod)}
+              className="text-[0.6rem] text-muted/60 hover:text-muted mt-2 cursor-pointer transition-colors"
+            >
+              {showMethod ? '▾ Nascondi metodo' : '▸ Come calcolato?'}
+            </button>
+            {showMethod && (
+              <div className="mt-1 text-[0.6rem] text-muted/70 leading-relaxed bg-surface2/50 rounded-lg p-2">
+                {goal.type === 'weekly_km' && (
+                  <>
+                    <strong>Media settimanale</strong>: calcolata sulle ultime 8 settimane di attivita Strava.
+                    <br />Il valore attuale ({current.toFixed(1)} km) e&apos; il totale km di questa settimana (da lunedi).
+                    <br />Se la media ({trend.weeklyAvg.toFixed(1)} km/sett) supera il target ({goal.target} km), sei on track.
+                  </>
+                )}
+                {goal.type === 'long_run_target' && (
+                  <>
+                    <strong>Long run piu lungo</strong>: il massimo km singola corsa tra tutte le attivita Strava.
+                    <br />La stima di raggiungimento assume un incremento medio di ~1.5 km/settimana sulla corsa lunga (regola del 10%).
+                    <br />Media long run ultime 8 sett: {trend.weeklyAvg.toFixed(1)} km.
+                  </>
+                )}
+                {goal.type === 'pace_target' && (
+                  <>
+                    <strong>Ritmo</strong>: basato sulla media ponderata delle ultime attivita da Strava (average_speed).
+                    <br />Non ancora supportate proiezioni per il ritmo — work in progress.
+                  </>
+                )}
+              </div>
+            )}
+          </>
+        )}
       </div>
     </Card>
   );
