@@ -132,12 +132,68 @@ export function PlanViewer({ weeks, activities = [], onUpdateMatch }: PlanViewer
     return autoMatchActivity(session, weekData.dateRange, activities);
   };
 
+  const [confirmMove, setConfirmMove] = useState<{
+    actId: number; actName: string;
+    fromWeek: number; fromSession: number; fromLabel: string;
+    toWeek: number; toSession: number;
+  } | null>(null);
+
+  // Build a map: activityId → { wi, si } for all currently matched sessions
+  const getMatchedActivityMap = (): Record<number, { wi: number; si: number; label: string }> => {
+    const map: Record<number, { wi: number; si: number; label: string }> = {};
+    weeks.forEach((week, wi) => {
+      week.sessions.forEach((s, si) => {
+        if (isSkipped(wi, si)) return;
+        const m = getMatch(wi, si, s);
+        if (m) {
+          const dayLabel = s.dayOfWeek.charAt(0).toUpperCase() + s.dayOfWeek.slice(1, 3);
+          map[m.id] = { wi, si, label: `Sett. ${week.weekNumber} ${dayLabel} (${SESSION_LABELS[s.type] || s.type})` };
+        }
+      });
+    });
+    return map;
+  };
+
   const setOverride = (wi: number, si: number, actId: number | null) => {
+    if (actId !== null) {
+      // Check if this activity is already matched elsewhere
+      const matchMap = getMatchedActivityMap();
+      const existing = matchMap[actId];
+      if (existing && !(existing.wi === wi && existing.si === si)) {
+        // Activity is used elsewhere — ask confirmation
+        const act = activities.find(a => a.id === actId);
+        setConfirmMove({
+          actId,
+          actName: act?.name || `ID ${actId}`,
+          fromWeek: existing.wi,
+          fromSession: existing.si,
+          fromLabel: existing.label,
+          toWeek: wi,
+          toSession: si,
+        });
+        return;
+      }
+    }
+    applyOverride(wi, si, actId);
+  };
+
+  const applyOverride = (wi: number, si: number, actId: number | null) => {
     const key = `${wi}-${si}`;
     setMatchOverrides(prev => ({ ...prev, [key]: actId }));
     if (onUpdateMatch) onUpdateMatch(wi, si, actId);
     setShowMatchPicker(null);
     setPickerSearch('');
+    setConfirmMove(null);
+  };
+
+  const handleConfirmMove = () => {
+    if (!confirmMove) return;
+    // Remove from old session
+    const oldKey = `${confirmMove.fromWeek}-${confirmMove.fromSession}`;
+    setMatchOverrides(prev => ({ ...prev, [oldKey]: null }));
+    if (onUpdateMatch) onUpdateMatch(confirmMove.fromWeek, confirmMove.fromSession, null);
+    // Apply to new session
+    applyOverride(confirmMove.toWeek, confirmMove.toSession, confirmMove.actId);
   };
 
   // Progress bars per week (like Runna)
@@ -354,8 +410,9 @@ export function PlanViewer({ weeks, activities = [], onUpdateMatch }: PlanViewer
 
                             {/* Activity list */}
                             <div className="max-h-52 overflow-y-auto space-y-0.5">
-                              {filtered.slice(0, 50).map(a => {
+                              {(() => { const matchMap = getMatchedActivityMap(); return filtered.slice(0, 50).map(a => {
                                 const isCurrentMatch = match?.id === a.id;
+                                const usedElsewhere = matchMap[a.id] && !(matchMap[a.id].wi === wi && matchMap[a.id].si === si);
                                 return (
                                   <button
                                     key={a.id}
@@ -363,19 +420,27 @@ export function PlanViewer({ weeks, activities = [], onUpdateMatch }: PlanViewer
                                     className={`w-full text-left px-2.5 py-2 rounded-lg text-xs cursor-pointer transition-all flex items-center gap-2 ${
                                       isCurrentMatch
                                         ? 'bg-green/15 border border-green/30'
-                                        : 'hover:bg-accent/10 border border-transparent'
+                                        : usedElsewhere
+                                          ? 'bg-yellow/5 border border-yellow/20 hover:bg-yellow/10'
+                                          : 'hover:bg-accent/10 border border-transparent'
                                     }`}
                                   >
                                     {isCurrentMatch && <span className="text-green shrink-0">&#10003;</span>}
+                                    {usedElsewhere && <span className="text-yellow shrink-0 text-[0.6rem]">&#9888;</span>}
                                     <div className="flex-1 min-w-0">
                                       <div className="font-medium truncate">{a.name}</div>
                                       <div className="text-muted font-mono mt-0.5">
                                         {fmtDateWithDay(new Date(a.start_date))} · {(a.distance / 1000).toFixed(1)}km · {fmtPace(1000 / a.average_speed)}/km
                                       </div>
+                                      {usedElsewhere && (
+                                        <div className="text-yellow/70 mt-0.5">
+                                          Gia associata a: {matchMap[a.id].label}
+                                        </div>
+                                      )}
                                     </div>
                                   </button>
                                 );
-                              })}
+                              }); })()}
                               {filtered.length > 50 && (
                                 <div className="text-[0.6rem] text-muted text-center py-2">
                                   Usa la ricerca per trovare altre attivita
@@ -393,6 +458,36 @@ export function PlanViewer({ weeks, activities = [], onUpdateMatch }: PlanViewer
           </div>
         );
       })}
+
+      {/* Confirmation dialog for moving an activity */}
+      {confirmMove && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center">
+          <div className="absolute inset-0 bg-bg/70 backdrop-blur-sm" onClick={() => setConfirmMove(null)} />
+          <div className="relative bg-surface border border-border rounded-2xl shadow-2xl p-6 max-w-md mx-4 animate-fade-up">
+            <div className="font-display text-lg tracking-wide mb-3">Sposta associazione?</div>
+            <p className="text-sm text-muted mb-4">
+              <strong className="text-text">{confirmMove.actName}</strong> e&apos; gia associata a <strong className="text-yellow">{confirmMove.fromLabel}</strong>.
+            </p>
+            <p className="text-sm text-muted mb-6">
+              Vuoi spostarla alla sessione selezionata? Verra rimossa dall&apos;associazione precedente.
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button
+                onClick={() => setConfirmMove(null)}
+                className="border border-border text-muted px-4 py-2 rounded-lg text-sm cursor-pointer hover:border-accent transition-all"
+              >
+                Annulla
+              </button>
+              <button
+                onClick={handleConfirmMove}
+                className="bg-accent text-white px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer hover:bg-accent2 transition-all"
+              >
+                Sposta
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
