@@ -87,7 +87,20 @@ function autoMatchActivity(
 }
 
 export function PlanViewer({ weeks, activities = [], onUpdateMatch }: PlanViewerProps) {
-  const [expandedWeek, setExpandedWeek] = useState<number | null>(null);
+  // Auto-expand current week on mount
+  const [expandedWeek, setExpandedWeek] = useState<number | null>(() => {
+    const today = new Date();
+    for (let i = 0; i < weeks.length; i++) {
+      const wd = weeks[i] as TrainingWeek & { dateRange?: string };
+      if (!wd.dateRange) continue;
+      const start = parseWeekStart(wd.dateRange);
+      if (!start) continue;
+      const end = new Date(start);
+      end.setDate(end.getDate() + 6);
+      if (today >= start && today <= end) return i;
+    }
+    return null;
+  });
   const [matchOverrides, setMatchOverrides] = useState<Record<string, number | null>>({});
   const [skippedSessions, setSkippedSessions] = useState<Record<string, boolean>>({});
   const [showMatchPicker, setShowMatchPicker] = useState<string | null>(null);
@@ -238,30 +251,54 @@ export function PlanViewer({ weeks, activities = [], onUpdateMatch }: PlanViewer
     return { total, completed, skipped };
   };
 
+  // Find current week based on today's date
+  const isCurrentWeek = (weekData: TrainingWeek & { dateRange?: string }): boolean => {
+    if (!weekData.dateRange) return false;
+    const start = parseWeekStart(weekData.dateRange);
+    if (!start) return false;
+    const end = new Date(start);
+    end.setDate(end.getDate() + 6);
+    end.setHours(23, 59, 59, 999);
+    const today = new Date();
+    return today >= start && today <= end;
+  };
+
   return (
     <div className="space-y-4">
       {weeks.map((week, wi) => {
         const weekData = week as TrainingWeek & { dateRange?: string };
         const progress = getWeekProgress(week, wi);
         const isExpanded = expandedWeek === wi;
+        const isCurrent = isCurrentWeek(weekData);
         const colors = SESSION_COLORS;
 
         return (
           <div
             key={wi}
-            className="bg-surface border border-border rounded-2xl overflow-hidden transition-all hover:border-accent/30"
+            className={`bg-surface rounded-2xl overflow-hidden transition-all ${
+              isCurrent
+                ? 'border-2 border-accent shadow-[0_0_20px_rgba(255,77,0,0.15)]'
+                : 'border border-border hover:border-accent/30'
+            }`}
           >
             {/* Week header - always visible */}
             <button
               onClick={() => setExpandedWeek(isExpanded ? null : wi)}
               className="w-full text-left px-5 py-4 cursor-pointer"
             >
-              {/* Date range */}
-              {weekData.dateRange && (
-                <div className="text-xs text-accent font-medium uppercase tracking-wider mb-1">
-                  {weekData.dateRange}
-                </div>
-              )}
+              {/* Current week badge + Date range */}
+              <div className="flex items-center gap-2 mb-1">
+                {weekData.dateRange && (
+                  <span className="text-xs text-accent font-medium uppercase tracking-wider">
+                    {weekData.dateRange}
+                  </span>
+                )}
+                {isCurrent && (
+                  <span className="text-[0.6rem] bg-accent text-white px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider">
+                    Corrente
+                  </span>
+                )}
+              </div>
 
               {/* Week number */}
               <div className="font-display text-2xl tracking-wide mb-3">
