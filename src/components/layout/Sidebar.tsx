@@ -15,7 +15,7 @@ export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <nav className="hidden md:flex flex-col gap-1 w-48 p-4 border-r border-border min-h-[calc(100vh-57px)]">
+    <nav className="hidden md:flex flex-col gap-1 w-48 p-4 border-r border-border sticky top-[57px] h-[calc(100vh-57px)] overflow-y-auto">
       {navItems.map((item) => {
         const active = pathname === item.href;
         return (

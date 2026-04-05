@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import type { TrainingWeek } from '@/types/training-plan';
 import type { StravaActivity } from '@/types/strava';
 
@@ -67,21 +67,41 @@ export function usePlanMatches(weeks: TrainingWeek[], activities: StravaActivity
     if (savedSkipped) setSkippedSessions(JSON.parse(savedSkipped));
   }, []);
 
+  // Build set of activity IDs that are manually confirmed (these are "taken")
+  const confirmedActivityIds = useMemo(() => {
+    const ids = new Set<number>();
+    // From manual overrides
+    Object.values(manualMatches).forEach(id => {
+      if (id !== null) ids.add(id);
+    });
+    // From session.matchedActivityId (persisted via plan save)
+    weeks.forEach(week => {
+      week.sessions.forEach(s => {
+        if (s.matchedActivityId) ids.add(s.matchedActivityId);
+      });
+    });
+    return ids;
+  }, [manualMatches, weeks]);
+
   const getMatchResult = useCallback((wi: number, si: number, session: TrainingWeek['sessions'][0]): { activity: StravaActivity; isManual: boolean } | null => {
     const key = `${wi}-${si}`;
+    // 1. Manual override — always wins
     if (key in manualMatches) {
       if (manualMatches[key] === null) return null;
       const act = activities.find(a => a.id === manualMatches[key]);
       return act ? { activity: act, isManual: true } : null;
     }
+    // 2. Previously saved match on session object
     if (session.matchedActivityId) {
       const act = activities.find(a => a.id === session.matchedActivityId);
       return act ? { activity: act, isManual: true } : null;
     }
+    // 3. Auto-match — exclude activities already confirmed elsewhere
     const weekData = weeks[wi] as TrainingWeek & { dateRange?: string };
-    const auto = autoMatch(session, weekData.dateRange, activities);
+    const availableActivities = activities.filter(a => !confirmedActivityIds.has(a.id));
+    const auto = autoMatch(session, weekData.dateRange, availableActivities);
     return auto ? { activity: auto, isManual: false } : null;
-  }, [weeks, activities, manualMatches]);
+  }, [weeks, activities, manualMatches, confirmedActivityIds]);
 
   const isSkipped = useCallback((wi: number, si: number) => {
     return skippedSessions[`${wi}-${si}`] === true;

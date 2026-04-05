@@ -138,6 +138,11 @@ export function PlanViewer({ weeks, activities = [], onUpdateMatch }: PlanViewer
 
   type MatchResult = { activity: StravaActivity; isManual: boolean } | null;
 
+  // Build set of confirmed activity IDs so auto-match skips them
+  const confirmedIds = new Set<number>();
+  Object.values(matchOverrides).forEach(id => { if (id !== null) confirmedIds.add(id); });
+  weeks.forEach(w => w.sessions.forEach(s => { if (s.matchedActivityId) confirmedIds.add(s.matchedActivityId); }));
+
   const getMatchResult = (wi: number, si: number, session: TrainingWeek['sessions'][0]): MatchResult => {
     const key = `${wi}-${si}`;
     // 1. Manual override (persisted)
@@ -151,9 +156,10 @@ export function PlanViewer({ weeks, activities = [], onUpdateMatch }: PlanViewer
       const act = activities.find(a => a.id === session.matchedActivityId);
       return act ? { activity: act, isManual: true } : null;
     }
-    // 3. Auto-match
+    // 3. Auto-match — exclude confirmed activities
     const weekData = weeks[wi] as TrainingWeek & { dateRange?: string };
-    const auto = autoMatchActivity(session, weekData.dateRange, activities);
+    const available = activities.filter(a => !confirmedIds.has(a.id));
+    const auto = autoMatchActivity(session, weekData.dateRange, available);
     return auto ? { activity: auto, isManual: false } : null;
   };
 
