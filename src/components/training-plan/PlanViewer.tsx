@@ -53,6 +53,7 @@ export function PlanViewer({ weeks, activities = [], onUpdateMatch }: PlanViewer
   const [expandedWeek, setExpandedWeek] = useState<number | null>(null);
   const [matchOverrides, setMatchOverrides] = useState<Record<string, number | null>>({});
   const [showMatchPicker, setShowMatchPicker] = useState<string | null>(null);
+  const [pickerSearch, setPickerSearch] = useState('');
 
   if (!weeks.length) return null;
 
@@ -76,6 +77,7 @@ export function PlanViewer({ weeks, activities = [], onUpdateMatch }: PlanViewer
     setMatchOverrides(prev => ({ ...prev, [key]: actId }));
     if (onUpdateMatch) onUpdateMatch(wi, si, actId);
     setShowMatchPicker(null);
+    setPickerSearch('');
   };
 
   // Progress bars per week (like Runna)
@@ -202,41 +204,89 @@ export function PlanViewer({ weeks, activities = [], onUpdateMatch }: PlanViewer
                       </div>
 
                       {/* Match picker dropdown */}
-                      {showMatchPicker === pickerKey && (
-                        <div className="ml-14 mb-2 bg-surface2 border border-border rounded-xl p-3 animate-fade-up">
-                          <div className="text-xs text-muted mb-2">Associa un&apos;attivita Strava:</div>
-                          <div className="max-h-40 overflow-y-auto space-y-1">
+                      {showMatchPicker === pickerKey && (() => {
+                        // Sort: currently matched first, then best matches, then all by date
+                        const allSorted = [...activities]
+                          .sort((a, b) => {
+                            // Current match always first
+                            if (match && a.id === match.id) return -1;
+                            if (match && b.id === match.id) return 1;
+                            // Then sort by date descending
+                            return new Date(b.start_date).getTime() - new Date(a.start_date).getTime();
+                          });
+
+                        // Apply search filter
+                        const filtered = pickerSearch.trim()
+                          ? allSorted.filter(a =>
+                              a.name.toLowerCase().includes(pickerSearch.toLowerCase()) ||
+                              (a.distance / 1000).toFixed(1).includes(pickerSearch) ||
+                              new Date(a.start_date).toLocaleDateString('it').includes(pickerSearch)
+                            )
+                          : allSorted;
+
+                        return (
+                          <div className="ml-14 mb-2 bg-surface2 border border-border rounded-xl p-3 animate-fade-up">
+                            {/* Current match indicator */}
                             {match && (
-                              <button
-                                onClick={() => setOverride(wi, si, null)}
-                                className="w-full text-left px-2 py-1.5 rounded text-xs text-red hover:bg-red/10 cursor-pointer transition-all"
-                              >
-                                &#215; Rimuovi associazione
-                              </button>
-                            )}
-                            {activities
-                              .filter(a => {
-                                const d = new Date(a.start_date);
-                                const actDow = (d.getDay() + 6) % 7;
-                                const dayIdx = DAY_ORDER.indexOf(s.dayOfWeek);
-                                // Show activities on same day of week, or within 30% distance
-                                return actDow === dayIdx || Math.abs(a.distance / 1000 - s.distanceKm) / s.distanceKm < 0.3;
-                              })
-                              .sort((a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime())
-                              .slice(0, 10)
-                              .map(a => (
+                              <div className="flex items-center gap-2 mb-2 pb-2 border-b border-border/50">
+                                <span className="text-[0.65rem] text-muted">Associata a:</span>
+                                <span className="text-xs text-green font-medium">{match.name}</span>
+                                <span className="text-[0.65rem] text-muted font-mono">
+                                  {(match.distance / 1000).toFixed(1)}km · {fmtPace(1000 / match.average_speed)}/km · {fmtDateWithDay(new Date(match.start_date))}
+                                </span>
                                 <button
-                                  key={a.id}
-                                  onClick={() => setOverride(wi, si, a.id)}
-                                  className={`w-full text-left px-2 py-1.5 rounded text-xs cursor-pointer transition-all hover:bg-accent/10 ${match?.id === a.id ? 'bg-green/10 text-green' : 'text-text'}`}
+                                  onClick={() => setOverride(wi, si, null)}
+                                  className="ml-auto text-xs text-red/60 hover:text-red cursor-pointer transition-colors"
                                 >
-                                  <span className="font-medium">{a.name}</span>
-                                  <span className="text-muted"> · {fmtDateWithDay(new Date(a.start_date))} · {(a.distance / 1000).toFixed(1)}km · {fmtPace(1000 / a.average_speed)}/km</span>
+                                  Rimuovi
                                 </button>
-                              ))}
+                              </div>
+                            )}
+
+                            {/* Search */}
+                            <input
+                              value={pickerSearch}
+                              onChange={e => setPickerSearch(e.target.value)}
+                              placeholder="Cerca per nome, data, km..."
+                              className="w-full bg-surface border border-border rounded-lg px-2.5 py-1.5 text-xs text-text mb-2"
+                              autoFocus
+                            />
+
+                            <div className="text-[0.6rem] text-muted mb-1">{filtered.length} attivita</div>
+
+                            {/* Activity list */}
+                            <div className="max-h-52 overflow-y-auto space-y-0.5">
+                              {filtered.slice(0, 50).map(a => {
+                                const isCurrentMatch = match?.id === a.id;
+                                return (
+                                  <button
+                                    key={a.id}
+                                    onClick={() => { setOverride(wi, si, a.id); setPickerSearch(''); }}
+                                    className={`w-full text-left px-2.5 py-2 rounded-lg text-xs cursor-pointer transition-all flex items-center gap-2 ${
+                                      isCurrentMatch
+                                        ? 'bg-green/15 border border-green/30'
+                                        : 'hover:bg-accent/10 border border-transparent'
+                                    }`}
+                                  >
+                                    {isCurrentMatch && <span className="text-green shrink-0">&#10003;</span>}
+                                    <div className="flex-1 min-w-0">
+                                      <div className="font-medium truncate">{a.name}</div>
+                                      <div className="text-muted font-mono mt-0.5">
+                                        {fmtDateWithDay(new Date(a.start_date))} · {(a.distance / 1000).toFixed(1)}km · {fmtPace(1000 / a.average_speed)}/km
+                                      </div>
+                                    </div>
+                                  </button>
+                                );
+                              })}
+                              {filtered.length > 50 && (
+                                <div className="text-[0.6rem] text-muted text-center py-2">
+                                  Usa la ricerca per trovare altre attivita
+                                </div>
+                              )}
+                            </div>
                           </div>
-                        </div>
-                      )}
+                        );
+                      })()}
                     </div>
                   );
                 })}
