@@ -5,6 +5,7 @@ import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Filler } from 'chart.js';
 import { getChartOptions } from './chartDefaults';
 import { Card } from '@/components/ui/Card';
+import { ChartExplainer } from '@/components/ui/ChartExplainer';
 import type { StravaActivity } from '@/types/strava';
 import type { TrainingPlan, TrainingWeek } from '@/types/training-plan';
 
@@ -120,13 +121,13 @@ export function LongRunChart({ activities }: { activities: StravaActivity[] }) {
           {
             label: 'Piano',
             data: plannedData,
-            borderColor: 'rgba(157,78,221,0.25)',
-            backgroundColor: 'rgba(157,78,221,0.04)',
+            borderColor: 'rgba(77,166,255,0.35)',
+            backgroundColor: 'rgba(77,166,255,0.04)',
             borderWidth: 2,
             borderDash: [6, 4],
             fill: true,
             tension: 0.3,
-            pointBackgroundColor: 'rgba(157,78,221,0.3)',
+            pointBackgroundColor: 'rgba(77,166,255,0.4)',
             pointRadius: 3,
             pointHoverRadius: 5,
             spanGaps: true,
@@ -182,7 +183,7 @@ export function LongRunChart({ activities }: { activities: StravaActivity[] }) {
           <>
             <span style={{ color: 'rgba(157,78,221,0.9)' }}>&#9644;</span> effettivo
             <span className="mx-1.5">|</span>
-            <span style={{ color: 'rgba(157,78,221,0.3)' }}>- -</span> piano
+            <span style={{ color: 'rgba(77,166,255,0.5)' }}>- -</span> piano
             <span className="mx-1.5">|</span>
             <span style={{ color: '#ff4d00' }}>&#9679;</span> &gt;21km
           </>
@@ -191,6 +192,18 @@ export function LongRunChart({ activities }: { activities: StravaActivity[] }) {
         )}
       </div>
       <Line data={data} options={getChartOptions({ showLegend: false, showDataLabels: true, dataLabelFormatter: (v: number) => v > 0 ? v.toFixed(1) : '' }) as Parameters<typeof Line>[0]['options']} height={220} />
+      <ChartExplainer>
+        <strong>Progressione Long Run</strong>: mostra la corsa piu lunga di ogni settimana.
+        {hasPlan && (
+          <>
+            <br />La <strong style={{ color: 'rgba(77,166,255,0.7)' }}>linea tratteggiata blu</strong> e&apos; la distanza pianificata dal piano Runna (sempre visibile su tutto il piano).
+            <br />La <strong style={{ color: 'rgba(157,78,221,0.9)' }}>linea solida viola</strong> e&apos; la distanza effettivamente corsa.
+            <br />Le corse vengono matchate al piano per data (±3 giorni).
+          </>
+        )}
+        <br />I pallini arancioni indicano corse &ge;21km (mezza maratona o piu).
+        <br />Utile per verificare la progressione graduale del lungo verso la distanza obiettivo.
+      </ChartExplainer>
     </Card>
   );
 }

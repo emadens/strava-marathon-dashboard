@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import { KPICard } from './KPICard';
+import { ChartExplainer } from '@/components/ui/ChartExplainer';
 import { fmtPace } from '@/lib/utils';
 import type { StravaActivity } from '@/types/strava';
 
@@ -62,13 +63,21 @@ export function KPIGrid({ activities: acts, previous: prev }: KPIGridProps) {
   }, [acts, prev]);
 
   return (
-    <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-4 mb-6">
-      <KPICard label="Distanza" value={kpis.distance.value} unit="km nel periodo" delta={kpis.distance.delta} delay={1} />
-      <KPICard label="Attivita" value={kpis.count.value} unit="corse" delay={2} />
-      <KPICard label="Ritmo medio" value={kpis.pace.value} unit="min/km" delta={kpis.pace.delta} delay={3} />
-      <KPICard label="Dislivello" value={kpis.elevation.value} unit="m totali" delay={4} />
-      <KPICard label="Tempo" value={kpis.time.value} unit="ore totali" delay={5} />
-      <KPICard label="FC media" value={kpis.hr.value} unit="bpm" delay={6} />
+    <div className="mb-6">
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-4">
+        <KPICard label="Distanza" value={kpis.distance.value} unit="km nel periodo" delta={kpis.distance.delta} delay={1} />
+        <KPICard label="Attivita" value={kpis.count.value} unit="corse" delay={2} />
+        <KPICard label="Ritmo medio" value={kpis.pace.value} unit="min/km" delta={kpis.pace.delta} delay={3} />
+        <KPICard label="Dislivello" value={kpis.elevation.value} unit="m totali" delay={4} />
+        <KPICard label="Tempo" value={kpis.time.value} unit="ore totali" delay={5} />
+        <KPICard label="FC media" value={kpis.hr.value} unit="bpm" delay={6} />
+      </div>
+      <ChartExplainer>
+        <strong>KPI riassuntivi</strong>: calcolati su tutte le corse nel periodo selezionato.
+        <br /><strong>Distanza</strong>: somma km. <strong>Attivita</strong>: numero corse. <strong>Ritmo medio</strong>: media dei ritmi medi (non pesata per distanza).
+        <br /><strong>Dislivello</strong>: somma m+ di tutte le corse. <strong>Tempo</strong>: somma ore di corsa. <strong>FC media</strong>: media delle FC medie (solo corse con HR).
+        <br />I delta (↑↓ %) confrontano con il periodo immediatamente precedente di pari durata.
+      </ChartExplainer>
     </div>
   );
 }

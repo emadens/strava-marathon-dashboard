@@ -6,7 +6,6 @@ import { Sidebar } from '@/components/layout/Sidebar';
 import { PeriodTabs } from '@/components/dashboard/PeriodTabs';
 import { KPIGrid } from '@/components/dashboard/KPIGrid';
 import { WeeklyKmChart } from '@/components/charts/WeeklyKmChart';
-import { ActivityTypesChart } from '@/components/charts/ActivityTypesChart';
 import { LongRunChart } from '@/components/charts/LongRunChart';
 import { PaceTrendChart } from '@/components/charts/PaceTrendChart';
 import { HRZonesDisplay } from '@/components/charts/HRZonesDisplay';
@@ -49,7 +48,6 @@ export default function DashboardPage() {
           {/* Charts Row 1 */}
           <div className="grid grid-cols-12 gap-4 mb-4">
             <WeeklyKmChart activities={filtered} />
-            <ActivityTypesChart activities={filtered} />
           </div>
 
           {/* Charts Row 2 */}

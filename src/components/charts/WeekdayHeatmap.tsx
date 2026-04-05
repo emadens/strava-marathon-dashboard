@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import { Card } from '@/components/ui/Card';
+import { ChartExplainer } from '@/components/ui/ChartExplainer';
 import type { StravaActivity } from '@/types/strava';
 
 const DAY_LABELS = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
@@ -41,6 +42,12 @@ export function WeekdayHeatmap({ activities }: { activities: StravaActivity[] })
           />
         ))}
       </div>
+      <ChartExplainer>
+        <strong>Mappa attivita</strong>: distribuzione dei km per giorno della settimana.
+        <br />Colore piu intenso = piu km corsi in quel giorno (nell&apos;intero periodo selezionato).
+        <br />Passa il mouse su un giorno per vedere km totali e numero di uscite.
+        <br />Utile per capire la distribuzione del carico nella settimana e identificare i giorni di riposo.
+      </ChartExplainer>
     </Card>
   );
 }

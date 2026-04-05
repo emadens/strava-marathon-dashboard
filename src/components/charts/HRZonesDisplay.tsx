@@ -2,6 +2,7 @@
 
 import { useMemo, useState, useEffect } from 'react';
 import { Card } from '@/components/ui/Card';
+import { ChartExplainer } from '@/components/ui/ChartExplainer';
 import type { StravaActivity } from '@/types/strava';
 
 const HR_ZONES_KEY = 'hr_zones_config';
@@ -173,6 +174,14 @@ export function HRZonesDisplay({ activities }: { activities: StravaActivity[] })
             </div>
           ))}
         </div>
+      )}
+      {!editing && (
+        <ChartExplainer>
+          <strong>Zone HR</strong>: distribuzione delle attivita per zona di frequenza cardiaca media.
+          <br />Ogni attivita viene assegnata alla zona corrispondente alla sua FC media.
+          <br />Le zone {isCustom ? 'sono personalizzate (dai tuoi dati Apple Watch)' : 'usano valori standard — clicca "Modifica zone" per inserire i tuoi range da Apple Watch'}.
+          <br />Un buon mix per preparazione maratona: ~70% Z2 (aerobico), ~20% Z3 (soglia), ~10% Z4-Z5 (alta intensita).
+        </ChartExplainer>
       )}
     </Card>
   );

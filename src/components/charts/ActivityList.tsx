@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { fmtPace, fmtTime } from '@/lib/utils';
 import { Card } from '@/components/ui/Card';
+import { ChartExplainer } from '@/components/ui/ChartExplainer';
 import type { StravaActivity } from '@/types/strava';
 
 export function ActivityList({ activities }: { activities: StravaActivity[] }) {
@@ -44,6 +45,11 @@ export function ActivityList({ activities }: { activities: StravaActivity[] }) {
           ))
         )}
       </div>
+      <ChartExplainer>
+        <strong>Attivita recenti</strong>: ultime 15 corse nel periodo selezionato, ordinate per data.
+        <br />Il pallino indica la distanza: <span style={{ color: 'var(--accent)' }}>&#9679;</span> &ge;15km, <span style={{ color: 'var(--accent2)' }}>&#9679;</span> &ge;10km, <span style={{ color: 'var(--blue)' }}>&#9679;</span> &lt;10km.
+        <br />Ogni riga mostra: nome, giorno, ritmo medio e durata.
+      </ChartExplainer>
     </Card>
   );
 }

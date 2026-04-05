@@ -5,6 +5,7 @@ import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Filler } from 'chart.js';
 import { fmtPace } from '@/lib/utils';
 import { Card } from '@/components/ui/Card';
+import { ChartExplainer } from '@/components/ui/ChartExplainer';
 import type { StravaActivity } from '@/types/strava';
 import type { TrainingWeek } from '@/types/training-plan';
 
@@ -222,6 +223,21 @@ export function PaceTrendChart({ activities, planWeeks, getMatchResult }: PaceTr
         }}
         height={220}
       />
+      <ChartExplainer>
+        <strong>Trend ritmo</strong>: mostra l&apos;andamento del ritmo medio per ogni corsa nel tempo.
+        {hasPlanData ? (
+          <>
+            <br />Le corse sono classificate in base alla <strong>tipologia dal piano</strong> (Tempo, Interval, Easy, Long Run).
+            <br />Per le corse di qualita (Tempo/Interval), il ritmo mostrato e&apos; il <strong>core pace</strong>: una stima che rimuove ~1km di warmup e ~1km di cooldown (tipicamente ~15% piu lenti) per isolare il ritmo di lavoro effettivo.
+            <br />Le corse Easy e Long Run mostrano il ritmo medio dell&apos;intera sessione.
+          </>
+        ) : (
+          <>
+            <br />Le corse sono classificate per ritmo: &lt;5:30/km = qualita, &gt;5:30/km = easy/long.
+          </>
+        )}
+        <br />L&apos;asse Y e&apos; invertito: piu in alto = piu veloce. Un trend in salita indica miglioramento.
+      </ChartExplainer>
     </Card>
   );
 }

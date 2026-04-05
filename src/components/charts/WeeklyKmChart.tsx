@@ -5,6 +5,7 @@ import { Bar } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Tooltip } from 'chart.js';
 import { getChartOptions } from './chartDefaults';
 import { Card } from '@/components/ui/Card';
+import { ChartExplainer } from '@/components/ui/ChartExplainer';
 import type { StravaActivity } from '@/types/strava';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip);
@@ -36,10 +37,15 @@ export function WeeklyKmChart({ activities }: { activities: StravaActivity[] }) 
   }, [activities]);
 
   return (
-    <Card className="col-span-8 max-lg:col-span-12">
+    <Card className="col-span-12">
       <div className="font-display text-base tracking-wide mb-0.5">Chilometraggio settimanale</div>
       <div className="text-[0.72rem] text-muted mb-5">km per settimana nel periodo selezionato</div>
       <Bar data={data} options={getChartOptions({ showLegend: false, showDataLabels: true, dataLabelFormatter: (v: number) => v > 0 ? v.toFixed(1) : '' }) as Parameters<typeof Bar>[0]['options']} height={200} />
+      <ChartExplainer>
+        <strong>Chilometraggio settimanale</strong>: somma dei km di tutte le corse nella settimana (da lunedi a domenica).
+        <br />La barra piu alta e&apos; evidenziata in arancione pieno. Le altre in arancione trasparente.
+        <br />Utile per monitorare la progressione del volume e identificare settimane di scarico.
+      </ChartExplainer>
     </Card>
   );
 }

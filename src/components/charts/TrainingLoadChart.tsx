@@ -5,6 +5,7 @@ import { Bar } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Tooltip } from 'chart.js';
 import { getChartOptions } from './chartDefaults';
 import { Card } from '@/components/ui/Card';
+import { ChartExplainer } from '@/components/ui/ChartExplainer';
 import type { StravaActivity } from '@/types/strava';
 
 ChartJS.register(CategoryScale, LinearScale, BarElement, Tooltip);
@@ -43,6 +44,12 @@ export function TrainingLoadChart({ activities }: { activities: StravaActivity[]
       <div className="font-display text-base tracking-wide mb-0.5">Carico allenamento</div>
       <div className="text-[0.72rem] text-muted mb-5">TSS stimato (settimane)</div>
       <Bar data={data} options={getChartOptions({ showLegend: false, showDataLabels: true, dataLabelFormatter: (v: number) => v > 0 ? String(Math.round(v)) : '' }) as Parameters<typeof Bar>[0]['options']} height={220} />
+      <ChartExplainer>
+        <strong>Carico allenamento (TSS stimato)</strong>: stima semplificata del Training Stress Score settimanale.
+        <br />Formula: durata(ore) × (1 + FC_media/150) × 30. Non e&apos; il vero TSS (che richiede FTP e potenza), ma da&apos; un&apos;indicazione relativa del carico.
+        <br />Barre piu intense (colore piu caldo) = settimane piu impegnative.
+        <br />Utile per monitorare il carico e prevenire sovrallenamento.
+      </ChartExplainer>
     </Card>
   );
 }
