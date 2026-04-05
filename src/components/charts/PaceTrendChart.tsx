@@ -204,7 +204,28 @@ export function PaceTrendChart({ activities, planWeeks, getMatchResult }: PaceTr
           responsive: true,
           animation: { duration: 600 },
           plugins: {
-            legend: { display: false },
+            legend: {
+              display: true,
+              position: 'top' as const,
+              align: 'end' as const,
+              labels: {
+                color: '#888',
+                font: { size: 10, family: 'DM Mono' },
+                padding: 8,
+                usePointStyle: true,
+                pointStyle: 'circle',
+                boxWidth: 6,
+              },
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+              onClick: (_: any, legendItem: any, legend: any) => {
+                const index = legendItem.datasetIndex;
+                if (index === undefined) return;
+                const ci = legend.chart;
+                const meta = ci.getDatasetMeta(index);
+                meta.hidden = meta.hidden === null ? !ci.data.datasets[index].hidden : null;
+                ci.update();
+              },
+            },
             datalabels: { display: false },
           },
           scales: {

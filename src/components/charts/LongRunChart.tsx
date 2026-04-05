@@ -55,7 +55,19 @@ export function LongRunChart({ activities, planWeeks: propPlanWeeks, getMatchRes
   const planWeeks = propPlanWeeks || storedPlanWeeks;
 
   const data = useMemo(() => {
-    // === Planned long runs ===
+    // Determine date range from filtered activities to scope the plan ghost
+    let rangeStart: Date | null = null;
+    let rangeEnd: Date | null = null;
+    if (activities.length > 0) {
+      const dates = activities.map(a => new Date(a.start_date).getTime());
+      rangeStart = new Date(Math.min(...dates));
+      rangeEnd = new Date(Math.max(...dates));
+      // Extend range end to today if it's within the range
+      const now = new Date();
+      if (now > rangeEnd) rangeEnd = now;
+    }
+
+    // === Planned long runs (filtered to same date range as activities) ===
     const plannedLongRuns: { date: Date; km: number; weekIdx: number; sessionIdx: number }[] = [];
     planWeeks.forEach((week, wi) => {
       const weekData = week as TrainingWeek & { dateRange?: string };
@@ -68,6 +80,8 @@ export function LongRunChart({ activities, planWeeks: propPlanWeeks, getMatchRes
         const dayIdx = DAY_ORDER.indexOf(longSession.dayOfWeek);
         const date = new Date(weekStart);
         date.setDate(weekStart.getDate() + (dayIdx >= 0 ? dayIdx : 5));
+        // Filter: only include if within the selected period
+        if (rangeStart && rangeEnd && (date < rangeStart || date > rangeEnd)) return;
         plannedLongRuns.push({ date, km: longSession.distanceKm, weekIdx: wi, sessionIdx: longSessionIdx });
       }
     });
@@ -203,7 +217,27 @@ export function LongRunChart({ activities, planWeeks: propPlanWeeks, getMatchRes
           <>corsa piu lunga per settimana (<span style={{ color: '#ff4d00' }}>&#9679;</span> &gt;21km)</>
         )}
       </div>
-      <Line data={data} options={getChartOptions({ showLegend: false, showDataLabels: true, dataLabelFormatter: (v: number) => v > 0 ? v.toFixed(1) : '' }) as Parameters<typeof Line>[0]['options']} height={220} />
+      <Line data={data} options={{
+        ...getChartOptions({ showLegend: false, showDataLabels: false }) as Parameters<typeof Line>[0]['options'],
+        plugins: {
+          ...((getChartOptions({ showDataLabels: false }) as Record<string, unknown>).plugins as object),
+          datalabels: {
+            color: '#999',
+            anchor: 'end' as const,
+            align: 'top' as const,
+            font: { size: 9, family: 'DM Mono' },
+            // Only show labels on the "Effettivo" dataset (index 1 with plan, 0 without)
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            display: (ctx: any) => {
+              const dsIndex = hasPlan ? 1 : 0;
+              if (ctx.datasetIndex !== dsIndex) return false;
+              const val = ctx.dataset.data[ctx.dataIndex];
+              return val !== null && val > 0;
+            },
+            formatter: (v: number) => v > 0 ? v.toFixed(1) : '',
+          },
+        },
+      }} height={220} />
       <ChartExplainer>
         <strong>Progressione Long Run</strong>: {hasPlan
           ? 'mostra la distanza effettiva delle long run associate nel piano vs la distanza pianificata.'
