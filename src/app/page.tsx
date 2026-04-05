@@ -52,7 +52,7 @@ export default function DashboardPage() {
 
           {/* Charts Row 2 */}
           <div className="grid grid-cols-12 gap-4 mb-4">
-            <LongRunChart activities={filtered} />
+            <LongRunChart activities={filtered} planWeeks={planWeeks} getMatchResult={getMatchResult} />
             <PaceTrendChart activities={filtered} planWeeks={planWeeks} getMatchResult={getMatchResult} />
           </div>
 
