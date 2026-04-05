@@ -1,5 +1,6 @@
 'use client';
 
+import { useState, useEffect } from 'react';
 import { Header } from '@/components/layout/Header';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PeriodTabs } from '@/components/dashboard/PeriodTabs';
@@ -16,10 +17,25 @@ import { Toast } from '@/components/ui/Toast';
 import { LoadingOverlay } from '@/components/ui/LoadingOverlay';
 import { useActivities } from '@/hooks/useActivities';
 import { usePeriodFilter } from '@/hooks/usePeriodFilter';
+import { usePlanMatches } from '@/hooks/usePlanMatches';
+import type { TrainingPlan } from '@/types/training-plan';
+
+const PLAN_STORAGE_KEY = 'marathon_training_plans';
 
 export default function DashboardPage() {
   const { activities, isLoading } = useActivities();
   const { filtered, previous } = usePeriodFilter(activities);
+
+  // Load plan for pace chart classification
+  const [planWeeks, setPlanWeeks] = useState<TrainingPlan['weeks']>([]);
+  useEffect(() => {
+    const saved = localStorage.getItem(PLAN_STORAGE_KEY);
+    if (saved) {
+      const plans: TrainingPlan[] = JSON.parse(saved);
+      if (plans.length > 0) setPlanWeeks(plans[0].weeks);
+    }
+  }, []);
+  const { getMatchResult } = usePlanMatches(planWeeks, activities);
 
   return (
     <div className="min-h-screen relative z-[1]">
@@ -39,7 +55,7 @@ export default function DashboardPage() {
           {/* Charts Row 2 */}
           <div className="grid grid-cols-12 gap-4 mb-4">
             <LongRunChart activities={filtered} />
-            <PaceTrendChart activities={filtered} />
+            <PaceTrendChart activities={filtered} planWeeks={planWeeks} getMatchResult={getMatchResult} />
           </div>
 
           {/* Charts Row 3 */}
