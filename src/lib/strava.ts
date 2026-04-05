@@ -22,13 +22,14 @@ export async function fetchAthleteStats(accessToken: string, athleteId: string):
   return stravaFetch<StravaAthleteStats>(`/athletes/${athleteId}/stats`, accessToken);
 }
 
-export async function fetchAllActivities(accessToken: string): Promise<StravaActivity[]> {
+export async function fetchAllActivities(accessToken: string, after?: number): Promise<StravaActivity[]> {
   const all: StravaActivity[] = [];
   let page = 1;
+  const afterParam = after ? `&after=${after}` : '';
 
   while (true) {
     const batch = await stravaFetch<StravaActivity[]>(
-      `/athlete/activities?per_page=200&page=${page}`,
+      `/athlete/activities?per_page=200&page=${page}${afterParam}`,
       accessToken
     );
 
