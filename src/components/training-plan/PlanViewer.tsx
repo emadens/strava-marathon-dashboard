@@ -18,6 +18,37 @@ const SESSION_LABELS: Record<string, string> = {
   interval: 'Intervals', long_run: 'Long Run', rest: 'Riposo', cross_training: 'Cross Training',
 };
 
+const MONTHS: Record<string, number> = {
+  'gen': 0, 'jan': 0, 'feb': 1, 'mar': 2, 'apr': 3, 'mag': 4, 'may': 4,
+  'giu': 5, 'jun': 5, 'lug': 6, 'jul': 6, 'ago': 7, 'aug': 7,
+  'set': 8, 'sep': 8, 'ott': 9, 'oct': 9, 'nov': 10, 'dic': 11, 'dec': 11,
+};
+
+function parseWeekStart(dateRange: string): Date | null {
+  // Parse "22 Dic - 28 Dic" → start date (22 Dic)
+  const parts = dateRange.split('-');
+  if (!parts.length) return null;
+  const match = parts[0].trim().match(/(\d+)\s+(\w+)/);
+  if (!match) return null;
+  const day = parseInt(match[1]);
+  const monthKey = match[2].toLowerCase().slice(0, 3);
+  const month = MONTHS[monthKey];
+  if (month === undefined) return null;
+  const year = month >= 11 ? 2025 : 2026;
+  return new Date(year, month, day);
+}
+
+function getPlannedDate(weekDateRange: string, dayOfWeek: string): Date | null {
+  const weekStart = parseWeekStart(weekDateRange);
+  if (!weekStart) return null;
+  const dayIdx = DAY_ORDER.indexOf(dayOfWeek);
+  if (dayIdx < 0) return null;
+  // weekStart is Monday (dayIdx 0)
+  const planned = new Date(weekStart);
+  planned.setDate(weekStart.getDate() + dayIdx);
+  return planned;
+}
+
 function autoMatchActivity(
   session: TrainingWeek['sessions'][0],
   weekDateRange: string | undefined,
@@ -25,28 +56,34 @@ function autoMatchActivity(
 ): StravaActivity | null {
   if (!activities.length || !weekDateRange) return null;
 
-  // Parse date range like "22 Dic - 28 Dic" or "4 Mag - 10 Mag"
-  // We need to find activities on the same day of the week within a ~20% distance tolerance
-  const dayIdx = DAY_ORDER.indexOf(session.dayOfWeek);
-  if (dayIdx < 0) return null;
+  const plannedDate = getPlannedDate(weekDateRange, session.dayOfWeek);
+  if (!plannedDate) return null;
 
-  // Find activities that match by day-of-week and approximate distance
+  const TOLERANCE_DAYS = 2;
+  const toleranceMs = TOLERANCE_DAYS * 24 * 60 * 60 * 1000;
+
+  // 1. Find activities within ±2 days of the planned date
   const candidates = activities.filter(a => {
-    const d = new Date(a.start_date);
-    const actDow = (d.getDay() + 6) % 7; // Mon=0
-    if (actDow !== dayIdx) return false;
-    // Distance within 30% tolerance
-    const actKm = a.distance / 1000;
-    const planKm = session.distanceKm;
-    if (planKm <= 0) return false;
-    return Math.abs(actKm - planKm) / planKm < 0.30;
+    const actDate = new Date(a.start_date);
+    return Math.abs(actDate.getTime() - plannedDate.getTime()) <= toleranceMs;
   });
 
   if (candidates.length === 0) return null;
-  // Return the closest match by distance
-  return candidates.sort((a, b) =>
-    Math.abs(a.distance / 1000 - session.distanceKm) - Math.abs(b.distance / 1000 - session.distanceKm)
-  )[0];
+
+  // 2. Score by: date closeness (primary) + distance similarity (secondary)
+  const scored = candidates.map(a => {
+    const actDate = new Date(a.start_date);
+    const daysDiff = Math.abs(actDate.getTime() - plannedDate.getTime()) / (24 * 60 * 60 * 1000);
+    const distDiff = session.distanceKm > 0
+      ? Math.abs(a.distance / 1000 - session.distanceKm) / session.distanceKm
+      : 1;
+    // Lower score = better match. Date is weighted 3x more than distance
+    const score = daysDiff * 3 + distDiff;
+    return { activity: a, score, daysDiff, distDiff };
+  });
+
+  scored.sort((a, b) => a.score - b.score);
+  return scored[0].activity;
 }
 
 export function PlanViewer({ weeks, activities = [], onUpdateMatch }: PlanViewerProps) {
