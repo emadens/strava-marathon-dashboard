@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useCallback } from 'react';
 import { Header } from '@/components/layout/Header';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PlanUpload } from '@/components/training-plan/PlanUpload';
@@ -10,11 +10,10 @@ import { Toast } from '@/components/ui/Toast';
 import { Card } from '@/components/ui/Card';
 import { useActivities } from '@/hooks/useActivities';
 import { usePlanMatches } from '@/hooks/usePlanMatches';
+import { useTrainingPlan } from '@/hooks/useTrainingPlan';
 import type { TrainingWeek, TrainingPlan } from '@/types/training-plan';
 import { generateId } from '@/lib/utils';
 import { parsePlanCSV } from '@/lib/plan-parser';
-
-const STORAGE_KEY = 'marathon_training_plans';
 
 // Pre-loaded Runna plan CSV
 const PRELOADED_CSV = `Settimana,Date,Km Totali,Giorno,Tipologia Allenamento,Km
@@ -86,38 +85,27 @@ Week 23,25 Mag - 31 Mag,48.70,Mer,Taper Intervals,6.5
 ,,,Sab,RACE (Maratona),42.2`;
 
 export default function TrainingPlanPage() {
-  const [plans, setPlans] = useState<TrainingPlan[]>([]);
+  const { plans, savePlans, removePlan: removeFromStore } = useTrainingPlan();
   const { activities } = useActivities();
   // Shared match resolution for stats
   const firstPlanWeeks = plans.length > 0 ? plans[0].weeks : [];
   const { getMatchResult, isSkipped: isSessionSkipped } = usePlanMatches(firstPlanWeeks, activities);
 
-  useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) {
-      setPlans(JSON.parse(saved));
-    } else {
-      // Auto-load the preloaded plan on first visit
-      const weeks = parsePlanCSV(PRELOADED_CSV);
-      if (weeks.length > 0) {
-        const plan: TrainingPlan = {
-          id: generateId(),
-          name: 'Piano Maratona Runna — 23 settimane',
-          weeks,
-          marathonDate: '2026-05-30',
-          createdAt: new Date().toISOString(),
-          source: 'manual',
-        };
-        setPlans([plan]);
-        localStorage.setItem(STORAGE_KEY, JSON.stringify([plan]));
-      }
+  // Auto-load preloaded plan if no plans exist
+  if (plans.length === 0 && typeof window !== 'undefined' && !localStorage.getItem('marathon_training_plans')) {
+    const weeks = parsePlanCSV(PRELOADED_CSV);
+    if (weeks.length > 0) {
+      const plan: TrainingPlan = {
+        id: generateId(),
+        name: 'Piano Maratona Runna — 23 settimane',
+        weeks,
+        marathonDate: '2026-05-30',
+        createdAt: new Date().toISOString(),
+        source: 'manual',
+      };
+      savePlans([plan]);
     }
-  }, []);
-
-  const savePlans = (updated: TrainingPlan[]) => {
-    setPlans(updated);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-  };
+  }
 
   const handleExtracted = (data: unknown, type: 'plan' | 'session') => {
     if (type === 'plan') {
@@ -133,7 +121,7 @@ export default function TrainingPlanPage() {
         source: 'ocr',
       };
 
-      savePlans([plan, ...plans]);
+      savePlans([plan, ...plans]); // Store clears stale matches if plan id changes
     }
   };
 
@@ -153,7 +141,7 @@ export default function TrainingPlanPage() {
   };
 
   const removePlan = (id: string) => {
-    savePlans(plans.filter(p => p.id !== id));
+    removeFromStore(id);
   };
 
   const [showUpload, setShowUpload] = useState(false);

@@ -1,13 +1,13 @@
 'use client';
 
-import { useMemo, useState, useEffect } from 'react';
+import { useMemo } from 'react';
 import { Line } from 'react-chartjs-2';
 import { Chart as ChartJS, CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Filler } from 'chart.js';
 import { getChartOptions } from './chartDefaults';
 import { Card } from '@/components/ui/Card';
 import { ChartExplainer } from '@/components/ui/ChartExplainer';
 import type { StravaActivity } from '@/types/strava';
-import type { TrainingPlan, TrainingWeek } from '@/types/training-plan';
+import type { TrainingWeek } from '@/types/training-plan';
 
 ChartJS.register(CategoryScale, LinearScale, PointElement, LineElement, Tooltip, Filler);
 
@@ -31,8 +31,6 @@ function parseWeekStartDate(dateRange: string): Date | null {
   return new Date(year, month, day);
 }
 
-const PLAN_KEY = 'marathon_training_plans';
-
 interface LongRunChartProps {
   activities: StravaActivity[];
   planWeeks?: TrainingWeek[];
@@ -40,19 +38,7 @@ interface LongRunChartProps {
 }
 
 export function LongRunChart({ activities, planWeeks: propPlanWeeks, getMatchResult }: LongRunChartProps) {
-  const [storedPlanWeeks, setStoredPlanWeeks] = useState<TrainingWeek[]>([]);
-
-  useEffect(() => {
-    if (!propPlanWeeks) {
-      const saved = localStorage.getItem(PLAN_KEY);
-      if (saved) {
-        const plans: TrainingPlan[] = JSON.parse(saved);
-        if (plans.length > 0) setStoredPlanWeeks(plans[0].weeks);
-      }
-    }
-  }, [propPlanWeeks]);
-
-  const planWeeks = propPlanWeeks || storedPlanWeeks;
+  const planWeeks = propPlanWeeks || [];
 
   const data = useMemo(() => {
     // Determine date range from filtered activities to scope the plan ghost
