@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Header } from '@/components/layout/Header';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PlanUpload } from '@/components/training-plan/PlanUpload';
@@ -151,18 +151,39 @@ export default function TrainingPlanPage() {
     savePlans(plans.filter(p => p.id !== id));
   };
 
+  const [showUpload, setShowUpload] = useState(false);
+
+  const handleExtractedAndClose = useCallback((data: unknown, type: 'plan' | 'session') => {
+    handleExtracted(data, type);
+    setShowUpload(false);
+  }, [handleExtracted]); // eslint-disable-line react-hooks/exhaustive-deps
+
   return (
     <div className="min-h-screen relative z-[1]">
       <Header />
       <div className="flex">
         <Sidebar />
         <main className="flex-1 p-6 max-w-[1400px] mx-auto">
-          <h1 className="font-display text-3xl tracking-wide mb-6">Piano di allenamento</h1>
-
-          {/* Upload section */}
-          <div className="mb-8">
-            <PlanUpload onExtracted={handleExtracted} />
+          <div className="flex items-center justify-between mb-6">
+            <h1 className="font-display text-3xl tracking-wide">Piano di allenamento</h1>
+            <button
+              onClick={() => setShowUpload(!showUpload)}
+              className={`px-4 py-2 rounded-lg text-sm font-semibold cursor-pointer transition-all ${
+                showUpload
+                  ? 'bg-surface2 border border-accent text-accent'
+                  : 'bg-accent text-white hover:bg-accent2'
+              }`}
+            >
+              {showUpload ? '✕ Chiudi' : '+ Aggiungi piano'}
+            </button>
           </div>
+
+          {/* Upload banner - slides down */}
+          {showUpload && (
+            <div className="mb-6 animate-fade-up">
+              <PlanUpload onExtracted={handleExtractedAndClose} />
+            </div>
+          )}
 
           {/* Saved plans */}
           {plans.length > 0 ? (
