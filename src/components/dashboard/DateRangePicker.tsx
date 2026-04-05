@@ -6,10 +6,59 @@ import { fmtDateShort } from '@/lib/utils';
 
 const MONTH_NAMES = ['Gennaio', 'Febbraio', 'Marzo', 'Aprile', 'Maggio', 'Giugno', 'Luglio', 'Agosto', 'Settembre', 'Ottobre', 'Novembre', 'Dicembre'];
 const DOW = ['Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab', 'Dom'];
+const SAVED_RANGES_KEY = 'saved_date_ranges';
+
+interface SavedRange {
+  id: string;
+  name: string;
+  start: string; // ISO date
+  end: string;
+}
 
 export function DateRangePicker() {
   const { period, customStart, customEnd, setCustomRange, setPeriod } = useDashboardStore();
   const [open, setOpen] = useState(false);
+  const [savedRanges, setSavedRanges] = useState<SavedRange[]>([]);
+  const [saveName, setSaveName] = useState('');
+  const [showSaveInput, setShowSaveInput] = useState(false);
+  const [showSavedList, setShowSavedList] = useState(false);
+
+  // Load saved ranges
+  useEffect(() => {
+    const saved = localStorage.getItem(SAVED_RANGES_KEY);
+    if (saved) setSavedRanges(JSON.parse(saved));
+  }, []);
+
+  const saveRange = () => {
+    if (!rangeStart || !rangeEnd || !saveName.trim()) return;
+    const newRange: SavedRange = {
+      id: Math.random().toString(36).slice(2),
+      name: saveName.trim(),
+      start: rangeStart.toISOString(),
+      end: rangeEnd.toISOString(),
+    };
+    const updated = [...savedRanges, newRange];
+    setSavedRanges(updated);
+    localStorage.setItem(SAVED_RANGES_KEY, JSON.stringify(updated));
+    setSaveName('');
+    setShowSaveInput(false);
+  };
+
+  const deleteSavedRange = (id: string) => {
+    const updated = savedRanges.filter(r => r.id !== id);
+    setSavedRanges(updated);
+    localStorage.setItem(SAVED_RANGES_KEY, JSON.stringify(updated));
+  };
+
+  const applySavedRange = (r: SavedRange) => {
+    const start = new Date(r.start);
+    const end = new Date(r.end);
+    setRangeStart(start);
+    setRangeEnd(end);
+    setCustomRange(start, end);
+    setOpen(false);
+    setShowSavedList(false);
+  };
   const [viewYear, setViewYear] = useState(new Date().getFullYear());
   const [viewMonth, setViewMonth] = useState(new Date().getMonth());
   const [rangeStart, setRangeStart] = useState<Date | null>(null);
@@ -124,6 +173,42 @@ export function DateRangePicker() {
           ref={popupRef}
           className="absolute top-[calc(100%+8px)] left-0 bg-surface border border-border rounded-xl p-5 z-[150] shadow-2xl animate-fade-up select-none"
         >
+          {/* Saved ranges dropdown */}
+          {savedRanges.length > 0 && (
+            <div className="mb-3">
+              <button
+                onClick={() => setShowSavedList(!showSavedList)}
+                className="text-xs text-muted hover:text-accent cursor-pointer transition-colors flex items-center gap-1"
+              >
+                <span>{showSavedList ? '▾' : '▸'}</span>
+                Preferiti ({savedRanges.length})
+              </button>
+              {showSavedList && (
+                <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
+                  {savedRanges.map(r => (
+                    <div key={r.id} className="flex items-center gap-2 group">
+                      <button
+                        onClick={() => applySavedRange(r)}
+                        className="flex-1 text-left text-xs bg-surface2 hover:bg-accent/10 px-2.5 py-1.5 rounded-lg cursor-pointer transition-all"
+                      >
+                        <span className="font-medium">{r.name}</span>
+                        <span className="text-muted font-mono ml-2">
+                          {fmtDateShort(new Date(r.start))} → {fmtDateShort(new Date(r.end))}
+                        </span>
+                      </button>
+                      <button
+                        onClick={() => deleteSavedRange(r.id)}
+                        className="text-muted/30 hover:text-red text-xs cursor-pointer opacity-0 group-hover:opacity-100 transition-all"
+                      >
+                        &#215;
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Header */}
           <div className="flex items-center justify-between mb-4">
             <button onClick={() => navMonth(-1)} className="w-8 h-8 border border-border rounded-lg flex items-center justify-center text-sm hover:border-accent hover:text-accent transition-all">
@@ -191,15 +276,53 @@ export function DateRangePicker() {
           </div>
 
           {/* Footer */}
-          <div className="flex items-center justify-between mt-4 gap-3">
-            <div className="text-xs text-muted font-mono">{rangeDisplay}</div>
-            <button
-              onClick={apply}
-              disabled={!rangeStart || !rangeEnd}
-              className="bg-accent text-white px-4 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all hover:bg-accent2 disabled:opacity-35 disabled:pointer-events-none"
-            >
-              Applica
-            </button>
+          <div className="mt-4 space-y-2">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-xs text-muted font-mono">{rangeDisplay}</div>
+              <div className="flex gap-2">
+                {rangeStart && rangeEnd && !showSaveInput && (
+                  <button
+                    onClick={() => setShowSaveInput(true)}
+                    className="border border-border text-muted px-3 py-1.5 rounded-lg text-xs cursor-pointer hover:border-accent hover:text-accent transition-all"
+                    title="Salva questo range nei preferiti"
+                  >
+                    &#9734;
+                  </button>
+                )}
+                <button
+                  onClick={apply}
+                  disabled={!rangeStart || !rangeEnd}
+                  className="bg-accent text-white px-4 py-1.5 rounded-lg text-xs font-semibold cursor-pointer transition-all hover:bg-accent2 disabled:opacity-35 disabled:pointer-events-none"
+                >
+                  Applica
+                </button>
+              </div>
+            </div>
+            {showSaveInput && (
+              <div className="flex gap-2 animate-fade-up">
+                <input
+                  value={saveName}
+                  onChange={e => setSaveName(e.target.value)}
+                  placeholder="Nome preferito (es. Prep. mese 1)"
+                  className="flex-1 bg-surface2 border border-border rounded-lg px-2.5 py-1.5 text-xs text-text"
+                  onKeyDown={e => e.key === 'Enter' && saveRange()}
+                  autoFocus
+                />
+                <button
+                  onClick={saveRange}
+                  disabled={!saveName.trim()}
+                  className="bg-accent text-white px-3 py-1.5 rounded-lg text-xs font-semibold cursor-pointer hover:bg-accent2 disabled:opacity-35 transition-all"
+                >
+                  Salva
+                </button>
+                <button
+                  onClick={() => { setShowSaveInput(false); setSaveName(''); }}
+                  className="text-muted text-xs cursor-pointer hover:text-text transition-colors px-1"
+                >
+                  &#215;
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
