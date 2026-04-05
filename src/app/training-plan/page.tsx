@@ -178,10 +178,26 @@ export default function TrainingPlanPage() {
             </button>
           </div>
 
-          {/* Upload banner - slides down */}
+          {/* Upload dialog/modal */}
           {showUpload && (
-            <div className="mb-6 animate-fade-up">
-              <PlanUpload onExtracted={handleExtractedAndClose} />
+            <div className="fixed inset-0 z-[200] flex items-start justify-center pt-16">
+              {/* Backdrop */}
+              <div className="absolute inset-0 bg-bg/70 backdrop-blur-sm" onClick={() => setShowUpload(false)} />
+              {/* Dialog */}
+              <div className="relative bg-surface border border-border rounded-2xl shadow-2xl w-full max-w-2xl max-h-[80vh] overflow-y-auto animate-fade-up mx-4">
+                <div className="sticky top-0 bg-surface border-b border-border/50 px-5 py-3 flex items-center justify-between rounded-t-2xl z-10">
+                  <span className="font-display text-lg tracking-wide">Aggiungi piano</span>
+                  <button
+                    onClick={() => setShowUpload(false)}
+                    className="text-muted hover:text-text text-lg cursor-pointer transition-colors w-8 h-8 flex items-center justify-center rounded-lg hover:bg-surface2"
+                  >
+                    &#215;
+                  </button>
+                </div>
+                <div className="p-5">
+                  <PlanUpload onExtracted={handleExtractedAndClose} />
+                </div>
+              </div>
             </div>
           )}
 

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { SESSION_COLORS } from '@/lib/plan-parser';
 import { fmtPace, fmtDateWithDay } from '@/lib/utils';
 import type { TrainingWeek } from '@/types/training-plan';
@@ -89,8 +89,31 @@ function autoMatchActivity(
 export function PlanViewer({ weeks, activities = [], onUpdateMatch }: PlanViewerProps) {
   const [expandedWeek, setExpandedWeek] = useState<number | null>(null);
   const [matchOverrides, setMatchOverrides] = useState<Record<string, number | null>>({});
+  const [skippedSessions, setSkippedSessions] = useState<Record<string, boolean>>({});
   const [showMatchPicker, setShowMatchPicker] = useState<string | null>(null);
   const [pickerSearch, setPickerSearch] = useState('');
+
+  // Load skipped state from localStorage
+  useEffect(() => {
+    const saved = localStorage.getItem('plan_skipped_sessions');
+    if (saved) setSkippedSessions(JSON.parse(saved));
+  }, []);
+
+  const setSkipped = (wi: number, si: number, skipped: boolean) => {
+    const key = `${wi}-${si}`;
+    const updated = { ...skippedSessions, [key]: skipped };
+    if (!skipped) delete updated[key];
+    setSkippedSessions(updated);
+    localStorage.setItem('plan_skipped_sessions', JSON.stringify(updated));
+    // Also clear any match override when skipping
+    if (skipped) {
+      setMatchOverrides(prev => ({ ...prev, [key]: null }));
+      if (onUpdateMatch) onUpdateMatch(wi, si, null);
+    }
+    setShowMatchPicker(null);
+  };
+
+  const isSkipped = (wi: number, si: number) => skippedSessions[`${wi}-${si}`] === true;
 
   if (!weeks.length) return null;
 
@@ -119,12 +142,17 @@ export function PlanViewer({ weeks, activities = [], onUpdateMatch }: PlanViewer
 
   // Progress bars per week (like Runna)
   const getWeekProgress = (week: TrainingWeek, wi: number) => {
-    const total = week.sessions.filter(s => s.type !== 'rest').length;
-    const completed = week.sessions.filter((s, si) => {
-      if (s.type === 'rest') return false;
-      return getMatch(wi, si, s) !== null;
+    const nonRest = week.sessions.filter(s => s.type !== 'rest');
+    const total = nonRest.length;
+    const completed = nonRest.filter((s) => {
+      const si = week.sessions.indexOf(s);
+      return getMatch(wi, si, s) !== null && !isSkipped(wi, si);
     }).length;
-    return { total, completed };
+    const skipped = nonRest.filter((s) => {
+      const si = week.sessions.indexOf(s);
+      return isSkipped(wi, si);
+    }).length;
+    return { total, completed, skipped };
   };
 
   return (
@@ -160,15 +188,17 @@ export function PlanViewer({ weeks, activities = [], onUpdateMatch }: PlanViewer
               {/* Progress bars (Runna style) */}
               <div className="flex gap-1.5 mb-3">
                 {week.sessions.filter(s => s.type !== 'rest').map((s, si) => {
-                  const match = getMatch(wi, week.sessions.indexOf(s), s);
+                  const realSi = week.sessions.indexOf(s);
+                  const match = getMatch(wi, realSi, s);
+                  const skipped = isSkipped(wi, realSi);
                   const color = colors[s.type] || colors.easy;
                   return (
                     <div key={si} className="flex-1 h-1.5 rounded-full overflow-hidden bg-surface2">
                       <div
                         className="h-full rounded-full transition-all duration-500"
                         style={{
-                          width: match ? '100%' : '0%',
-                          background: color.dot,
+                          width: (match || skipped) ? '100%' : '0%',
+                          background: skipped ? '#666' : color.dot,
                         }}
                       />
                     </div>
@@ -181,6 +211,11 @@ export function PlanViewer({ weeks, activities = [], onUpdateMatch }: PlanViewer
                 <span className="text-muted">
                   Allenamenti: <span className="text-text font-medium">{progress.completed}/{progress.total}</span>
                 </span>
+                {progress.skipped > 0 && (
+                  <span className="text-muted">
+                    Saltati: <span className="text-yellow font-medium">{progress.skipped}</span>
+                  </span>
+                )}
                 <span className="text-muted">
                   Distanza: <span className="text-text font-medium">{week.weeklyTotalKm.toFixed(1)}km</span>
                 </span>
@@ -221,7 +256,14 @@ export function PlanViewer({ weeks, activities = [], onUpdateMatch }: PlanViewer
                         </div>
 
                         {/* Match status */}
-                        {match ? (
+                        {isSkipped(wi, si) ? (
+                          <button
+                            onClick={(e) => { e.stopPropagation(); setShowMatchPicker(showMatchPicker === pickerKey ? null : pickerKey); }}
+                            className="flex items-center gap-1.5 text-xs text-yellow bg-yellow/10 px-2.5 py-1 rounded-lg cursor-pointer hover:bg-yellow/20 transition-all line-through"
+                          >
+                            Saltato
+                          </button>
+                        ) : match ? (
                           <button
                             onClick={(e) => { e.stopPropagation(); setShowMatchPicker(showMatchPicker === pickerKey ? null : pickerKey); }}
                             className="flex items-center gap-1.5 text-xs text-green bg-green/10 px-2.5 py-1 rounded-lg cursor-pointer hover:bg-green/20 transition-all"
@@ -263,8 +305,27 @@ export function PlanViewer({ weeks, activities = [], onUpdateMatch }: PlanViewer
 
                         return (
                           <div className="ml-14 mb-2 bg-surface2 border border-border rounded-xl p-3 animate-fade-up">
+                            {/* Skip / Unskip buttons */}
+                            <div className="flex gap-2 mb-2 pb-2 border-b border-border/50">
+                              {isSkipped(wi, si) ? (
+                                <button
+                                  onClick={() => setSkipped(wi, si, false)}
+                                  className="text-xs text-green hover:bg-green/10 px-2.5 py-1.5 rounded-lg cursor-pointer transition-all"
+                                >
+                                  &#10003; Rimuovi &quot;saltato&quot;
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => setSkipped(wi, si, true)}
+                                  className="text-xs text-yellow hover:bg-yellow/10 px-2.5 py-1.5 rounded-lg cursor-pointer transition-all"
+                                >
+                                  &#10007; Segna come saltato
+                                </button>
+                              )}
+                            </div>
+
                             {/* Current match indicator */}
-                            {match && (
+                            {match && !isSkipped(wi, si) && (
                               <div className="flex items-center gap-2 mb-2 pb-2 border-b border-border/50">
                                 <span className="text-[0.65rem] text-muted">Associata a:</span>
                                 <span className="text-xs text-green font-medium">{match.name}</span>
