@@ -24,7 +24,7 @@ export function RaceTimeEstimator({ bestEfforts }: RaceTimeEstimatorProps) {
   const [savedVo2, setSavedVo2] = useState<SavedVO2 | null>(null);
   const [selectedEffort, setSelectedEffort] = useState<string>('auto');
 
-  // Load saved VO2 on mount
+  // Load saved VO2 on mount (localStorage first, then KV)
   useEffect(() => {
     const saved = localStorage.getItem(VO2_STORAGE_KEY);
     if (saved) {
@@ -32,6 +32,15 @@ export function RaceTimeEstimator({ bestEfforts }: RaceTimeEstimatorProps) {
       setSavedVo2(data);
       setVo2Input(String(data.value));
       setVo2Date(data.date);
+    } else {
+      fetch('/api/user-data?type=vo2max').then(r => r.ok ? r.json() : null).then(result => {
+        if (result?.data) {
+          setSavedVo2(result.data);
+          setVo2Input(String(result.data.value));
+          setVo2Date(result.data.date);
+          localStorage.setItem(VO2_STORAGE_KEY, JSON.stringify(result.data));
+        }
+      }).catch(() => {});
     }
   }, []);
 
@@ -45,6 +54,8 @@ export function RaceTimeEstimator({ bestEfforts }: RaceTimeEstimatorProps) {
     };
     localStorage.setItem(VO2_STORAGE_KEY, JSON.stringify(data));
     setSavedVo2(data);
+    // Sync to KV
+    fetch('/api/user-data', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type: 'vo2max', data }) }).catch(() => {});
   };
 
   // Find the best effort to base VDOT on (prefer longer distances)

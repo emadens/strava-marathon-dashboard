@@ -3,6 +3,10 @@
 import { useMemo, useState, useEffect } from 'react';
 import { Card } from '@/components/ui/Card';
 import { ChartExplainer } from '@/components/ui/ChartExplainer';
+
+function syncKV(type: string, data: unknown) {
+  fetch('/api/user-data', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type, data }) }).catch(() => {});
+}
 import type { StravaActivity } from '@/types/strava';
 
 const HR_ZONES_KEY = 'hr_zones_config';
@@ -29,7 +33,7 @@ export function HRZonesDisplay({ activities }: { activities: StravaActivity[] })
   const [editValues, setEditValues] = useState<ZoneConfig[]>(DEFAULT_ZONES);
   const [isCustom, setIsCustom] = useState(false);
 
-  // Load saved zones
+  // Load saved zones (localStorage first, then KV)
   useEffect(() => {
     const saved = localStorage.getItem(HR_ZONES_KEY);
     if (saved) {
@@ -37,6 +41,16 @@ export function HRZonesDisplay({ activities }: { activities: StravaActivity[] })
       setZoneConfig(parsed);
       setEditValues(parsed);
       setIsCustom(true);
+    } else {
+      // Try KV (new device)
+      fetch('/api/user-data?type=hr_zones').then(r => r.ok ? r.json() : null).then(result => {
+        if (result?.data) {
+          setZoneConfig(result.data);
+          setEditValues(result.data);
+          setIsCustom(true);
+          localStorage.setItem(HR_ZONES_KEY, JSON.stringify(result.data));
+        }
+      }).catch(() => {});
     }
   }, []);
 
@@ -52,6 +66,7 @@ export function HRZonesDisplay({ activities }: { activities: StravaActivity[] })
     setZoneConfig(chained);
     setEditValues(chained);
     localStorage.setItem(HR_ZONES_KEY, JSON.stringify(chained));
+    syncKV('hr_zones', chained);
     setIsCustom(true);
     setEditing(false);
   };
@@ -60,6 +75,7 @@ export function HRZonesDisplay({ activities }: { activities: StravaActivity[] })
     setZoneConfig(DEFAULT_ZONES);
     setEditValues(DEFAULT_ZONES);
     localStorage.removeItem(HR_ZONES_KEY);
+    syncKV('hr_zones', null);
     setIsCustom(false);
     setEditing(false);
   };

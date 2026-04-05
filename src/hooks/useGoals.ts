@@ -1,23 +1,12 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useCallback } from 'react';
 import type { Goal } from '@/types/goals';
 import { generateId } from '@/lib/utils';
-
-const STORAGE_KEY = 'marathon_goals';
+import { useSyncedStorage } from './useSyncedStorage';
 
 export function useGoals() {
-  const [goals, setGoals] = useState<Goal[]>([]);
-
-  useEffect(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) setGoals(JSON.parse(saved));
-  }, []);
-
-  const save = useCallback((updated: Goal[]) => {
-    setGoals(updated);
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(updated));
-  }, []);
+  const { data: goals, save } = useSyncedStorage<Goal[]>('marathon_goals', 'goals', []);
 
   const addGoal = useCallback((goal: Omit<Goal, 'id' | 'createdAt'>) => {
     save([...goals, { ...goal, id: generateId(), createdAt: new Date().toISOString() }]);
