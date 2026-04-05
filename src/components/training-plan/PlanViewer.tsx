@@ -115,21 +115,38 @@ export function PlanViewer({ weeks, activities = [], onUpdateMatch }: PlanViewer
 
   const isSkipped = (wi: number, si: number) => skippedSessions[`${wi}-${si}`] === true;
 
+  // Load persisted manual matches
+  useEffect(() => {
+    const saved = localStorage.getItem('plan_manual_matches');
+    if (saved) setMatchOverrides(JSON.parse(saved));
+  }, []);
+
   if (!weeks.length) return null;
 
-  const getMatch = (wi: number, si: number, session: TrainingWeek['sessions'][0]): StravaActivity | null => {
+  type MatchResult = { activity: StravaActivity; isManual: boolean } | null;
+
+  const getMatchResult = (wi: number, si: number, session: TrainingWeek['sessions'][0]): MatchResult => {
     const key = `${wi}-${si}`;
+    // 1. Manual override (persisted)
     if (key in matchOverrides) {
       if (matchOverrides[key] === null) return null;
-      return activities.find(a => a.id === matchOverrides[key]) || null;
+      const act = activities.find(a => a.id === matchOverrides[key]);
+      return act ? { activity: act, isManual: true } : null;
     }
-    // Check if session already has a matched activity
+    // 2. Previously saved match on the session object
     if (session.matchedActivityId) {
-      return activities.find(a => a.id === session.matchedActivityId) || null;
+      const act = activities.find(a => a.id === session.matchedActivityId);
+      return act ? { activity: act, isManual: true } : null;
     }
-    // Auto-match
+    // 3. Auto-match
     const weekData = weeks[wi] as TrainingWeek & { dateRange?: string };
-    return autoMatchActivity(session, weekData.dateRange, activities);
+    const auto = autoMatchActivity(session, weekData.dateRange, activities);
+    return auto ? { activity: auto, isManual: false } : null;
+  };
+
+  // Backward-compat wrapper
+  const getMatch = (wi: number, si: number, session: TrainingWeek['sessions'][0]): StravaActivity | null => {
+    return getMatchResult(wi, si, session)?.activity ?? null;
   };
 
   const [confirmMove, setConfirmMove] = useState<{
@@ -179,7 +196,10 @@ export function PlanViewer({ weeks, activities = [], onUpdateMatch }: PlanViewer
 
   const applyOverride = (wi: number, si: number, actId: number | null) => {
     const key = `${wi}-${si}`;
-    setMatchOverrides(prev => ({ ...prev, [key]: actId }));
+    const updated = { ...matchOverrides, [key]: actId };
+    setMatchOverrides(updated);
+    // Persist manual matches
+    localStorage.setItem('plan_manual_matches', JSON.stringify(updated));
     if (onUpdateMatch) onUpdateMatch(wi, si, actId);
     setShowMatchPicker(null);
     setPickerSearch('');
@@ -188,12 +208,19 @@ export function PlanViewer({ weeks, activities = [], onUpdateMatch }: PlanViewer
 
   const handleConfirmMove = () => {
     if (!confirmMove) return;
-    // Remove from old session
+    // Remove from old session and apply to new — both persisted
     const oldKey = `${confirmMove.fromWeek}-${confirmMove.fromSession}`;
-    setMatchOverrides(prev => ({ ...prev, [oldKey]: null }));
-    if (onUpdateMatch) onUpdateMatch(confirmMove.fromWeek, confirmMove.fromSession, null);
-    // Apply to new session
-    applyOverride(confirmMove.toWeek, confirmMove.toSession, confirmMove.actId);
+    const newKey = `${confirmMove.toWeek}-${confirmMove.toSession}`;
+    const updated = { ...matchOverrides, [oldKey]: null, [newKey]: confirmMove.actId };
+    setMatchOverrides(updated);
+    localStorage.setItem('plan_manual_matches', JSON.stringify(updated));
+    if (onUpdateMatch) {
+      onUpdateMatch(confirmMove.fromWeek, confirmMove.fromSession, null);
+      onUpdateMatch(confirmMove.toWeek, confirmMove.toSession, confirmMove.actId);
+    }
+    setShowMatchPicker(null);
+    setPickerSearch('');
+    setConfirmMove(null);
   };
 
   // Progress bars per week (like Runna)
@@ -319,30 +346,50 @@ export function PlanViewer({ weeks, activities = [], onUpdateMatch }: PlanViewer
                         </div>
 
                         {/* Match status */}
-                        {isSkipped(wi, si) ? (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setShowMatchPicker(showMatchPicker === pickerKey ? null : pickerKey); }}
-                            className="flex items-center gap-1.5 text-xs text-yellow bg-yellow/10 px-2.5 py-1 rounded-lg cursor-pointer hover:bg-yellow/20 transition-all line-through"
-                          >
-                            Saltato
-                          </button>
-                        ) : match ? (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setShowMatchPicker(showMatchPicker === pickerKey ? null : pickerKey); }}
-                            className="flex items-center gap-1.5 text-xs text-green bg-green/10 px-2.5 py-1 rounded-lg cursor-pointer hover:bg-green/20 transition-all"
-                          >
-                            <span>&#10003;</span>
-                            <span className="font-mono">{(match.distance / 1000).toFixed(1)}km</span>
-                            <span className="text-green/60">{fmtPace(1000 / match.average_speed)}/km</span>
-                          </button>
-                        ) : (
-                          <button
-                            onClick={(e) => { e.stopPropagation(); setShowMatchPicker(showMatchPicker === pickerKey ? null : pickerKey); }}
-                            className="text-xs text-muted/40 border border-border/50 px-2.5 py-1 rounded-lg cursor-pointer hover:border-accent/30 hover:text-muted transition-all"
-                          >
-                            Associa
-                          </button>
-                        )}
+                        {(() => {
+                          const matchResult = getMatchResult(wi, si, s);
+                          const matchAct = matchResult?.activity;
+                          const isManual = matchResult?.isManual ?? false;
+                          const openPicker = (e: React.MouseEvent) => { e.stopPropagation(); setShowMatchPicker(showMatchPicker === pickerKey ? null : pickerKey); };
+
+                          if (isSkipped(wi, si)) return (
+                            <button onClick={openPicker}
+                              className="flex items-center gap-1.5 text-xs text-yellow bg-yellow/10 px-2.5 py-1 rounded-lg cursor-pointer hover:bg-yellow/20 transition-all line-through">
+                              Saltato
+                            </button>
+                          );
+
+                          if (matchAct) return (
+                            <div className="flex items-center gap-1.5">
+                              <button onClick={openPicker}
+                                className={`flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg cursor-pointer transition-all ${
+                                  isManual ? 'text-green bg-green/10 hover:bg-green/20' : 'text-blue bg-blue/10 hover:bg-blue/20'
+                                }`}>
+                                <span>{isManual ? '✓' : '~'}</span>
+                                <span className="font-mono">{(matchAct.distance / 1000).toFixed(1)}km</span>
+                                <span className={isManual ? 'text-green/60' : 'text-blue/60'}>{fmtPace(1000 / matchAct.average_speed)}/km</span>
+                                {!isManual && <span className="text-[0.55rem] text-blue/40">auto</span>}
+                              </button>
+                              {/* Confirm auto-match button */}
+                              {!isManual && (
+                                <button
+                                  onClick={(e) => { e.stopPropagation(); applyOverride(wi, si, matchAct.id); }}
+                                  className="text-[0.6rem] text-blue/50 hover:text-green border border-blue/20 hover:border-green/40 px-1.5 py-0.5 rounded cursor-pointer transition-all"
+                                  title="Conferma questa associazione automatica"
+                                >
+                                  &#10003;
+                                </button>
+                              )}
+                            </div>
+                          );
+
+                          return (
+                            <button onClick={openPicker}
+                              className="text-xs text-muted/40 border border-border/50 px-2.5 py-1 rounded-lg cursor-pointer hover:border-accent/30 hover:text-muted transition-all">
+                              Associa
+                            </button>
+                          );
+                        })()}
                       </div>
 
                       {/* Match picker dropdown */}
