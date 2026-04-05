@@ -170,7 +170,7 @@ export default function GoalsPage() {
       <Header />
       <div className="flex">
         <Sidebar />
-        <main className="flex-1 p-6 max-w-[1400px] mx-auto">
+        <main className="flex-1 p-6 pb-20 md:pb-6 max-w-[1400px] mx-auto">
           <div className="flex items-center justify-between mb-6">
             <h1 className="font-display text-3xl tracking-wide">Obiettivi</h1>
             <button

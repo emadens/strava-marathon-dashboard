@@ -48,7 +48,7 @@ export default function DashboardPage() {
       <Header />
       <div className="flex">
         <Sidebar />
-        <main className="flex-1 p-6 max-w-[1400px] mx-auto">
+        <main className="flex-1 p-6 pb-20 md:pb-6 max-w-[1400px] mx-auto">
           <PeriodTabs />
           <KPIGrid activities={filtered} previous={previous} />
 
