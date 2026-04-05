@@ -5,9 +5,11 @@ import { Header } from '@/components/layout/Header';
 import { Sidebar } from '@/components/layout/Sidebar';
 import { PlanUpload } from '@/components/training-plan/PlanUpload';
 import { PlanViewer } from '@/components/training-plan/PlanViewer';
+import { PlanStats } from '@/components/training-plan/PlanStats';
 import { Toast } from '@/components/ui/Toast';
 import { Card } from '@/components/ui/Card';
 import { useActivities } from '@/hooks/useActivities';
+import { usePlanMatches } from '@/hooks/usePlanMatches';
 import type { TrainingWeek, TrainingPlan } from '@/types/training-plan';
 import { generateId } from '@/lib/utils';
 import { parsePlanCSV } from '@/lib/plan-parser';
@@ -86,6 +88,9 @@ Week 23,25 Mag - 31 Mag,48.70,Mer,Taper Intervals,6.5
 export default function TrainingPlanPage() {
   const [plans, setPlans] = useState<TrainingPlan[]>([]);
   const { activities } = useActivities();
+  // Shared match resolution for stats
+  const firstPlanWeeks = plans.length > 0 ? plans[0].weeks : [];
+  const { getMatchResult, isSkipped: isSessionSkipped } = usePlanMatches(firstPlanWeeks, activities);
 
   useEffect(() => {
     const saved = localStorage.getItem(STORAGE_KEY);
@@ -199,6 +204,16 @@ export default function TrainingPlanPage() {
                 </div>
               </div>
             </div>
+          )}
+
+          {/* Plan stats dashboard */}
+          {plans.length > 0 && activities.length > 0 && (
+            <PlanStats
+              weeks={firstPlanWeeks}
+              activities={activities}
+              getMatchResult={getMatchResult}
+              isSkipped={isSessionSkipped}
+            />
           )}
 
           {/* Saved plans */}
