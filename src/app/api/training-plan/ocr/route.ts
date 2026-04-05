@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSession } from '@/lib/auth';
-import { extractTrainingPlan, extractSessionDetail } from '@/lib/ocr';
+import { extractTrainingPlan, extractSessionDetail, estimateOCRCost } from '@/lib/ocr';
 
 export async function POST(request: NextRequest) {
   const session = await getSession();
@@ -15,28 +15,31 @@ export async function POST(request: NextRequest) {
   try {
     const formData = await request.formData();
     const file = formData.get('image') as File | null;
-    const type = formData.get('type') as string || 'plan'; // 'plan' or 'session'
+    const type = formData.get('type') as string || 'plan';
+    const estimateOnly = formData.get('estimate_only') === 'true';
 
     if (!file) {
       return NextResponse.json({ error: 'Nessuna immagine caricata' }, { status: 400 });
     }
 
-    // Validate file type
     const validTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
     if (!validTypes.includes(file.type)) {
       return NextResponse.json({ error: 'Tipo file non supportato. Usa JPG, PNG, GIF o WebP.' }, { status: 400 });
     }
 
-    // Max 10MB
     if (file.size > 10 * 1024 * 1024) {
       return NextResponse.json({ error: 'File troppo grande (max 10MB)' }, { status: 400 });
     }
 
-    // Convert to base64
+    // Estimate-only mode: return cost without calling API
+    if (estimateOnly) {
+      const estimate = estimateOCRCost(file.size);
+      return NextResponse.json({ estimate });
+    }
+
     const buffer = await file.arrayBuffer();
     const base64 = Buffer.from(buffer).toString('base64');
 
-    // Extract data
     const result = type === 'session'
       ? await extractSessionDetail(base64, file.type)
       : await extractTrainingPlan(base64, file.type);
