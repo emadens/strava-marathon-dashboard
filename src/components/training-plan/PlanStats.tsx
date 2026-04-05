@@ -67,7 +67,7 @@ export function PlanStats({ weeks, activities, getMatchResult, isSkipped }: Plan
     const typeBreakdown: Record<string, { total: number; met: number; label: string }> = {};
 
     // Per-week compliance
-    const weeklyCompliance: { week: number; dateRange: string; total: number; completed: number; skipped: number; missed: number; kmPlanned: number; kmActual: number }[] = [];
+    const weeklyCompliance: { week: number; dateRange: string; total: number; completed: number; skipped: number; missed: number; kmPlanned: number; kmActual: number; isPast: boolean }[] = [];
 
     let totalKmPlanned = 0;
     let totalKmActual = 0;
@@ -140,18 +140,18 @@ export function PlanStats({ weeks, activities, getMatchResult, isSkipped }: Plan
         }
       });
 
-      if (weekTotal > 0 || weekData.dateRange) {
-        weeklyCompliance.push({
-          week: week.weekNumber,
-          dateRange: weekData.dateRange || '',
-          total: weekTotal,
-          completed: weekCompleted,
-          skipped: weekSkipped,
-          missed: weekMissed,
-          kmPlanned: weekKmPlanned,
-          kmActual: weekKmActual,
-        });
-      }
+      // Always add the week so we can show all weeks in the chart
+      weeklyCompliance.push({
+        week: week.weekNumber,
+        dateRange: weekData.dateRange || '',
+        total: weekTotal,
+        completed: weekCompleted,
+        skipped: weekSkipped,
+        missed: weekMissed,
+        kmPlanned: weekKmPlanned,
+        kmActual: weekKmActual,
+        isPast: weekTotal > 0,
+      });
     });
 
     const complianceRate = totalPast > 0 ? (completed / totalPast * 100) : 0;
@@ -291,35 +291,69 @@ export function PlanStats({ weeks, activities, getMatchResult, isSkipped }: Plan
       {/* Weekly compliance mini-chart */}
       <Card hover={false}>
         <div className="font-display text-base tracking-wide mb-1">Aderenza per settimana</div>
-        <div className="text-[0.72rem] text-muted mb-4">completate vs pianificate (solo settimane passate)</div>
-        <div className="flex gap-1 items-end h-24">
-          {stats.weeklyCompliance.filter(w => w.total > 0).map((w, i) => {
-            const pct = w.total > 0 ? (w.completed / w.total * 100) : 0;
-            const isCurrentWeek = (() => {
-              const today = new Date();
-              const weekData = weeks[i] as TrainingWeek & { dateRange?: string };
-              if (!weekData?.dateRange) return false;
-              const parts = weekData.dateRange.split('-');
-              const match = parts[0]?.trim().match(/(\d+)\s+(\w+)/);
-              if (!match) return false;
+        <div className="text-[0.72rem] text-muted mb-4">
+          completate vs pianificate
+          <span className="ml-2 text-[0.6rem]">
+            <span style={{ color: 'var(--green)' }}>&#9632;</span> completate
+            <span className="ml-1.5" style={{ color: 'var(--yellow)' }}>&#9632;</span> saltate
+            <span className="ml-1.5" style={{ color: 'var(--muted)' }}>&#9632;</span> future
+          </span>
+        </div>
+        <div className="flex gap-1 items-end h-28">
+          {stats.weeklyCompliance.map((w) => {
+            const sessionsInWeek = weeks.find(wk => wk.weekNumber === w.week)?.sessions.filter(s => s.type !== 'rest').length || 1;
+            const pct = w.isPast && w.total > 0 ? (w.completed / w.total * 100) : 0;
+            const skipPct = w.isPast && w.total > 0 ? (w.skipped / w.total * 100) : 0;
+
+            // Determine if this is the current week
+            const today = new Date();
+            const isCurrent = (() => {
+              if (!w.dateRange) return false;
+              const parts = w.dateRange.split('-');
+              const m = parts[0]?.trim().match(/(\d+)\s+(\w+)/);
+              if (!m) return false;
               const MONTHS: Record<string, number> = { 'gen':0,'jan':0,'feb':1,'mar':2,'apr':3,'mag':4,'may':4,'giu':5,'jun':5,'lug':6,'jul':6,'ago':7,'aug':7,'set':8,'sep':8,'ott':9,'oct':9,'nov':10,'dic':11,'dec':11 };
-              const month = MONTHS[match[2].toLowerCase().slice(0,3)];
+              const month = MONTHS[m[2].toLowerCase().slice(0,3)];
               if (month === undefined) return false;
               const year = month >= 11 ? 2025 : 2026;
-              const start = new Date(year, month, parseInt(match[1]));
+              const start = new Date(year, month, parseInt(m[1]));
               const end = new Date(start); end.setDate(end.getDate() + 6);
               return today >= start && today <= end;
             })();
 
+            const isFuture = !w.isPast && !isCurrent;
+
             return (
-              <div key={i} className="flex-1 flex flex-col items-center gap-0.5" title={`Sett. ${w.week}: ${w.completed}/${w.total} (${pct.toFixed(0)}%)`}>
-                <div className="w-full rounded-sm overflow-hidden bg-surface2" style={{ height: '100%', position: 'relative' }}>
-                  <div
-                    className="absolute bottom-0 w-full rounded-sm transition-all"
-                    style={{ height: `${pct}%`, background: isCurrentWeek ? 'var(--accent)' : pctBg(pct) }}
-                  />
+              <div
+                key={w.week}
+                className="flex-1 flex flex-col items-center gap-0.5"
+                title={w.isPast
+                  ? `Sett. ${w.week}: ${w.completed}/${w.total} completate, ${w.skipped} saltate`
+                  : `Sett. ${w.week}: ${sessionsInWeek} sessioni pianificate`
+                }
+              >
+                <div className="w-full rounded-sm overflow-hidden bg-surface2 relative" style={{ height: '100%' }}>
+                  {isFuture ? (
+                    // Future: show a dim outline
+                    <div className="absolute bottom-0 w-full rounded-sm border border-dashed border-border/40" style={{ height: '30%' }} />
+                  ) : (
+                    <>
+                      {/* Completed bar */}
+                      <div
+                        className="absolute bottom-0 w-full rounded-sm transition-all"
+                        style={{ height: `${pct}%`, background: isCurrent ? 'var(--accent)' : 'var(--green)' }}
+                      />
+                      {/* Skipped bar on top */}
+                      {skipPct > 0 && (
+                        <div
+                          className="absolute w-full rounded-sm transition-all"
+                          style={{ bottom: `${pct}%`, height: `${skipPct}%`, background: 'var(--yellow)', opacity: 0.6 }}
+                        />
+                      )}
+                    </>
+                  )}
                 </div>
-                <span className={`text-[0.5rem] font-mono ${isCurrentWeek ? 'text-accent font-bold' : 'text-muted/40'}`}>
+                <span className={`text-[0.5rem] font-mono ${isCurrent ? 'text-accent font-bold' : isFuture ? 'text-muted/20' : 'text-muted/50'}`}>
                   {w.week}
                 </span>
               </div>
