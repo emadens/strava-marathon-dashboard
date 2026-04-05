@@ -1,10 +1,18 @@
 'use client';
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { Card } from '@/components/ui/Card';
 import { calculateVDOT, predictRaceTime, trainingPaces, blendedVDOT, RACE_DISTANCES } from '@/lib/vdot';
 import { fmtDuration, fmtPace } from '@/lib/utils';
 import type { StravaBestEffort } from '@/types/strava';
+
+const VO2_STORAGE_KEY = 'apple_watch_vo2max';
+
+interface SavedVO2 {
+  value: number;
+  date: string;
+  savedAt: string;
+}
 
 interface RaceTimeEstimatorProps {
   bestEfforts: StravaBestEffort[];
@@ -12,7 +20,32 @@ interface RaceTimeEstimatorProps {
 
 export function RaceTimeEstimator({ bestEfforts }: RaceTimeEstimatorProps) {
   const [vo2Input, setVo2Input] = useState('');
+  const [vo2Date, setVo2Date] = useState('');
+  const [savedVo2, setSavedVo2] = useState<SavedVO2 | null>(null);
   const [selectedEffort, setSelectedEffort] = useState<string>('auto');
+
+  // Load saved VO2 on mount
+  useEffect(() => {
+    const saved = localStorage.getItem(VO2_STORAGE_KEY);
+    if (saved) {
+      const data = JSON.parse(saved) as SavedVO2;
+      setSavedVo2(data);
+      setVo2Input(String(data.value));
+      setVo2Date(data.date);
+    }
+  }, []);
+
+  const saveVo2 = () => {
+    const value = parseFloat(vo2Input);
+    if (!value || value < 10 || value > 90) return;
+    const data: SavedVO2 = {
+      value,
+      date: vo2Date || new Date().toISOString().slice(0, 10),
+      savedAt: new Date().toISOString(),
+    };
+    localStorage.setItem(VO2_STORAGE_KEY, JSON.stringify(data));
+    setSavedVo2(data);
+  };
 
   // Find the best effort to base VDOT on (prefer longer distances)
   const baseEffort = useMemo(() => {
@@ -87,17 +120,39 @@ export function RaceTimeEstimator({ bestEfforts }: RaceTimeEstimatorProps) {
             <label className="text-xs text-muted block mb-1">
               VO2 Max Apple Watch <span className="text-muted/50">(opzionale)</span>
             </label>
-            <input
-              type="number"
-              step="0.1"
-              value={vo2Input}
-              onChange={e => setVo2Input(e.target.value)}
-              placeholder="es. 48.5 ml/kg/min"
-              className="w-full bg-surface2 border border-border rounded-lg px-3 py-2 text-sm text-text"
-            />
-            <p className="text-[0.6rem] text-muted mt-1">
-              iPhone: Salute → Sfoglia → Cuore → Fitness cardio (VO2 max)
-            </p>
+            <div className="flex gap-2">
+              <input
+                type="number"
+                step="0.1"
+                value={vo2Input}
+                onChange={e => setVo2Input(e.target.value)}
+                placeholder="es. 48.5"
+                className="flex-1 bg-surface2 border border-border rounded-lg px-3 py-2 text-sm text-text"
+              />
+              <input
+                type="date"
+                value={vo2Date}
+                onChange={e => setVo2Date(e.target.value)}
+                className="w-32 bg-surface2 border border-border rounded-lg px-2 py-2 text-xs text-text"
+                title="Data misurazione"
+              />
+              <button
+                onClick={saveVo2}
+                disabled={!vo2Input || parseFloat(vo2Input) < 10}
+                className="bg-accent text-white px-3 py-2 rounded-lg text-xs font-semibold cursor-pointer hover:bg-accent2 transition-all disabled:opacity-30 disabled:pointer-events-none shrink-0"
+              >
+                Salva
+              </button>
+            </div>
+            {savedVo2 ? (
+              <p className="text-[0.6rem] text-green mt-1 font-mono">
+                Salvato: {savedVo2.value} ml/kg/min del {new Date(savedVo2.date).toLocaleDateString('it', { day: '2-digit', month: 'short', year: 'numeric' })}
+              </p>
+            ) : (
+              <p className="text-[0.6rem] text-muted mt-1">
+                iPhone: Salute → Sfoglia → Cuore → Fitness cardio (VO2 max)
+              </p>
+            )}
           </div>
 
           <div className="flex items-center">
@@ -105,6 +160,11 @@ export function RaceTimeEstimator({ bestEfforts }: RaceTimeEstimatorProps) {
               <div>
                 <div className="text-xs text-muted mb-1">Il tuo VDOT</div>
                 <div className="font-display text-4xl text-accent">{vdot.toFixed(1)}</div>
+                {savedVo2 && (
+                  <div className="text-[0.6rem] text-muted font-mono mt-1">
+                    Strava + VO2 ({savedVo2.value})
+                  </div>
+                )}
               </div>
             )}
           </div>
