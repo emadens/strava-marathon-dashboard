@@ -15,6 +15,7 @@ export default function GoalsPage() {
   const { activities } = useActivities();
   const [showForm, setShowForm] = useState(false);
   const [formType, setFormType] = useState<GoalType>('weekly_km');
+  const [paceMethod, setPaceMethod] = useState<'tempo_only' | 'weighted' | 'best_recent'>('weighted');
   const [formTarget, setFormTarget] = useState('');
   const [formDate, setFormDate] = useState('');
   const [formLabel, setFormLabel] = useState('');
@@ -33,14 +34,48 @@ export default function GoalsPage() {
 
   const longestRun = Math.max(0, ...activities.map(a => a.distance / 1000));
 
-  // Average pace from last 10 activities (in min/km as decimal, e.g. 5.5 = 5:30/km)
-  const recentPaceActs = [...activities]
-    .filter(a => a.average_speed > 0)
-    .sort((a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime())
-    .slice(0, 10);
-  const avgPaceMinKm = recentPaceActs.length
-    ? recentPaceActs.reduce((s, a) => s + (1000 / a.average_speed / 60), 0) / recentPaceActs.length
-    : 0;
+  // === 3 PACE CALCULATION METHODS ===
+  const paceCalcs = useMemo(() => {
+    const sixWeeksAgo = new Date();
+    sixWeeksAgo.setDate(sixWeeksAgo.getDate() - 42);
+    const recentActs = activities
+      .filter(a => a.average_speed > 0 && new Date(a.start_date) >= sixWeeksAgo)
+      .sort((a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime());
+
+    const toPaceMinKm = (a: typeof activities[0]) => 1000 / a.average_speed / 60;
+
+    // 1. TEMPO ONLY: activities with pace < 5:40/km (faster runs = likely tempo/interval)
+    const tempoThreshold = 5.67; // 5:40 min/km
+    const tempoActs = recentActs.filter(a => toPaceMinKm(a) < tempoThreshold && a.distance >= 5000);
+    const tempoOnly = tempoActs.length
+      ? tempoActs.reduce((s, a) => s + toPaceMinKm(a), 0) / tempoActs.length
+      : 0;
+
+    // 2. WEIGHTED: peso maggiore a corse veloci, minore a easy/recovery
+    // Fast (<5:20) = weight 3, Medium (5:20-5:50) = weight 2, Slow (>5:50) = weight 1
+    let weightedSum = 0, weightTotal = 0;
+    recentActs.filter(a => a.distance >= 3000).forEach(a => {
+      const pace = toPaceMinKm(a);
+      const weight = pace < 5.33 ? 3 : pace < 5.83 ? 2 : 1;
+      weightedSum += pace * weight;
+      weightTotal += weight;
+    });
+    const weighted = weightTotal > 0 ? weightedSum / weightTotal : 0;
+
+    // 3. BEST RECENT: miglior ritmo medio su distanze >5km nelle ultime 6 settimane
+    const longEnough = recentActs.filter(a => a.distance >= 5000);
+    const bestRecent = longEnough.length
+      ? Math.min(...longEnough.map(a => toPaceMinKm(a)))
+      : 0;
+
+    return {
+      tempo_only: { value: tempoOnly, count: tempoActs.length, label: 'Solo tempo run', desc: `Media delle ${tempoActs.length} corse con ritmo <5:40/km e distanza >5km (ultime 6 sett)` },
+      weighted: { value: weighted, count: recentActs.filter(a => a.distance >= 3000).length, label: 'Media pesata', desc: `Media pesata: corse veloci (<5:20) peso 3x, medie (5:20-5:50) peso 2x, lente (>5:50) peso 1x (ultime 6 sett, >3km)` },
+      best_recent: { value: bestRecent, count: longEnough.length, label: 'Miglior recente', desc: `Miglior ritmo medio su una singola corsa >5km nelle ultime 6 settimane (su ${longEnough.length} corse)` },
+    };
+  }, [activities]);
+
+  const avgPaceMinKm = paceCalcs[paceMethod].value;
 
   // Compute weekly averages from last 8 weeks for trend analysis
   const weeklyStats = useMemo(() => {
@@ -87,13 +122,12 @@ export default function GoalsPage() {
         };
       }
       case 'pace_target': {
-        // For pace, lower is better. Current = avgPaceMinKm, target = goal.target
-        // "remaining" doesn't make sense the same way — we show how far off we are
-        const diff = current - target; // positive = slower than target
+        const diff = current - target;
         return {
           weeklyAvg: avgPaceMinKm,
-          weeksToTarget: diff > 0 ? null : 0, // 0 = already achieved
+          weeksToTarget: diff > 0 ? null : 0,
           projectedDate: diff <= 0 ? 'Raggiunto!' : null,
+          methodDesc: paceCalcs[paceMethod].desc,
         };
       }
       default:
@@ -211,6 +245,33 @@ export default function GoalsPage() {
           {marathonGoal?.marathonDate && (
             <div className="mb-6">
               <MarathonCountdown marathonDate={marathonGoal.marathonDate} totalKmToDate={totalKm} />
+            </div>
+          )}
+
+          {/* Pace calculation method selector */}
+          {goals.some(g => g.type === 'pace_target') && (
+            <div className="bg-surface border border-border rounded-xl p-4 mb-6">
+              <div className="text-xs text-muted uppercase tracking-wider mb-3">Metodo calcolo ritmo</div>
+              <div className="flex gap-2 flex-wrap mb-3">
+                {(['tempo_only', 'weighted', 'best_recent'] as const).map(method => (
+                  <button
+                    key={method}
+                    onClick={() => setPaceMethod(method)}
+                    className={`px-3 py-2 rounded-lg text-xs font-medium transition-all border cursor-pointer ${
+                      paceMethod === method ? 'border-accent text-accent bg-accent/5' : 'border-border text-muted hover:border-accent/50'
+                    }`}
+                  >
+                    <div>{paceCalcs[method].label}</div>
+                    <div className="font-mono mt-0.5">
+                      {paceCalcs[method].value > 0
+                        ? `${Math.floor(paceCalcs[method].value)}:${String(Math.round((paceCalcs[method].value % 1) * 60)).padStart(2, '0')}/km`
+                        : 'n/a'
+                      }
+                    </div>
+                  </button>
+                ))}
+              </div>
+              <div className="text-[0.65rem] text-muted/70">{paceCalcs[paceMethod].desc}</div>
             </div>
           )}
 

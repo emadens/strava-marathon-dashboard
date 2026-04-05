@@ -8,7 +8,7 @@ import type { Goal } from '@/types/goals';
 interface GoalCardProps {
   goal: Goal;
   current: number;
-  trend: { weeklyAvg: number; weeksToTarget: number | null; projectedDate: string | null };
+  trend: { weeklyAvg: number; weeksToTarget: number | null; projectedDate: string | null; methodDesc?: string };
   onRemove: (id: string) => void;
 }
 
@@ -141,8 +141,9 @@ export function GoalCard({ goal, current, trend, onRemove }: GoalCardProps) {
                 )}
                 {goal.type === 'pace_target' && (
                   <>
-                    <strong>Ritmo</strong>: basato sulla media ponderata delle ultime attivita da Strava (average_speed).
-                    <br />Non ancora supportate proiezioni per il ritmo — work in progress.
+                    <strong>Ritmo</strong>: {trend.methodDesc || 'calcolato dalle attivita Strava recenti'}.
+                    <br />Il valore attuale ({isPace && current > 0 ? fmtPace(current * 60) : current.toFixed(1)}/km) vs target ({fmtPace(goal.target * 60)}/km).
+                    <br />Puoi cambiare metodo di calcolo nel selettore sopra.
                   </>
                 )}
               </div>
