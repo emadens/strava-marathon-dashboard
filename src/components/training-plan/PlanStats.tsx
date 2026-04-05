@@ -332,7 +332,7 @@ export function PlanStats({ weeks, activities, getMatchResult, isSkipped }: Plan
                   : `Sett. ${w.week}: ${sessionsInWeek} sessioni pianificate`
                 }
               >
-                <div className="w-full rounded-sm overflow-hidden bg-surface2 relative" style={{ height: '100%' }}>
+                <div className="w-full rounded-sm overflow-hidden bg-surface2 relative h-24">
                   {isFuture ? (
                     // Future: show a dim outline
                     <div className="absolute bottom-0 w-full rounded-sm border border-dashed border-border/40" style={{ height: '30%' }} />
