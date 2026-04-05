@@ -56,17 +56,56 @@ export default function SplitsPage() {
       .finally(() => setLoading(false));
   }, [selectedId]);
 
-  // Load cached best efforts on mount
+  const [autoLoadProgress, setAutoLoadProgress] = useState('');
+
+  // Load cached best efforts + auto-fetch key activities in background
   useEffect(() => {
-    const efforts: StravaBestEffort[] = [];
-    sorted.slice(0, 10).forEach(act => {
-      const cached = localStorage.getItem(`activity_detail_${act.id}`);
-      if (cached) {
-        const data = JSON.parse(cached) as StravaDetailedActivity;
-        if (data.best_efforts) efforts.push(...data.best_efforts);
+    if (!activities.length) return;
+
+    const loadEfforts = async () => {
+      const efforts: StravaBestEffort[] = [];
+
+      // 1. Load all already-cached efforts
+      activities.forEach(act => {
+        const cached = localStorage.getItem(`activity_detail_${act.id}`);
+        if (cached) {
+          const data = JSON.parse(cached) as StravaDetailedActivity;
+          if (data.best_efforts) efforts.push(...data.best_efforts);
+        }
+      });
+
+      // 2. Find key activities to auto-fetch (long runs >10km, sorted by distance desc)
+      const keyActivities = [...activities]
+        .filter(a => a.distance >= 10000) // 10km+
+        .sort((a, b) => b.distance - a.distance) // longest first
+        .slice(0, 20); // max 20 to avoid rate limits
+
+      const toFetch = keyActivities.filter(
+        a => !localStorage.getItem(`activity_detail_${a.id}`)
+      );
+
+      // 3. Fetch uncached key activities in background (with delay to respect rate limits)
+      if (toFetch.length > 0) {
+        setAutoLoadProgress(`Caricamento PR: 0/${toFetch.length}...`);
+        for (let i = 0; i < toFetch.length; i++) {
+          try {
+            setAutoLoadProgress(`Caricamento PR: ${i + 1}/${toFetch.length}...`);
+            const res = await fetch(`/api/strava/activity/${toFetch[i].id}`);
+            if (res.ok) {
+              const data = await res.json() as StravaDetailedActivity;
+              localStorage.setItem(`activity_detail_${toFetch[i].id}`, JSON.stringify(data));
+              if (data.best_efforts) efforts.push(...data.best_efforts);
+            }
+            // 1.5s delay between requests to stay well under Strava rate limit (100/15min)
+            if (i < toFetch.length - 1) await new Promise(r => setTimeout(r, 1500));
+          } catch {
+            // Skip failed fetches silently
+          }
+        }
+        setAutoLoadProgress('');
       }
-    });
-    if (efforts.length) {
+
+      // 4. Deduplicate: keep best time per distance
       const byName: Record<string, StravaBestEffort> = {};
       efforts.forEach(e => {
         if (!byName[e.name] || e.elapsed_time < byName[e.name].elapsed_time) {
@@ -74,7 +113,9 @@ export default function SplitsPage() {
         }
       });
       setAllEfforts(Object.values(byName));
-    }
+    };
+
+    loadEfforts();
   }, [activities.length]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
@@ -89,7 +130,13 @@ export default function SplitsPage() {
           <div className="mb-8">
             <h2 className="font-display text-xl tracking-wide mb-4">Record personali</h2>
             <BestEfforts efforts={allEfforts} />
-            {allEfforts.length === 0 && (
+            {autoLoadProgress && (
+              <div className="flex items-center gap-2 mt-3 text-xs text-muted font-mono animate-fade-up">
+                <div className="w-3 h-3 border border-border border-t-accent rounded-full animate-spin" />
+                {autoLoadProgress}
+              </div>
+            )}
+            {allEfforts.length === 0 && !autoLoadProgress && (
               <p className="text-sm text-muted mt-2">
                 Seleziona un&apos;attivita per caricare i tuoi PR. I dati vengono memorizzati localmente.
               </p>
