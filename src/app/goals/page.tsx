@@ -33,6 +33,15 @@ export default function GoalsPage() {
 
   const longestRun = Math.max(0, ...activities.map(a => a.distance / 1000));
 
+  // Average pace from last 10 activities (in min/km as decimal, e.g. 5.5 = 5:30/km)
+  const recentPaceActs = [...activities]
+    .filter(a => a.average_speed > 0)
+    .sort((a, b) => new Date(b.start_date).getTime() - new Date(a.start_date).getTime())
+    .slice(0, 10);
+  const avgPaceMinKm = recentPaceActs.length
+    ? recentPaceActs.reduce((s, a) => s + (1000 / a.average_speed / 60), 0) / recentPaceActs.length
+    : 0;
+
   // Compute weekly averages from last 8 weeks for trend analysis
   const weeklyStats = useMemo(() => {
     const weeks: Record<string, { km: number; longestRun: number; count: number }> = {};
@@ -77,6 +86,16 @@ export default function GoalsPage() {
           projectedDate: projDate ? projDate.toLocaleDateString('it', { day: '2-digit', month: 'short' }) : null,
         };
       }
+      case 'pace_target': {
+        // For pace, lower is better. Current = avgPaceMinKm, target = goal.target
+        // "remaining" doesn't make sense the same way — we show how far off we are
+        const diff = current - target; // positive = slower than target
+        return {
+          weeklyAvg: avgPaceMinKm,
+          weeksToTarget: diff > 0 ? null : 0, // 0 = already achieved
+          projectedDate: diff <= 0 ? 'Raggiunto!' : null,
+        };
+      }
       default:
         return { weeklyAvg: 0, weeksToTarget: null, projectedDate: null };
     }
@@ -91,6 +110,7 @@ export default function GoalsPage() {
         if (!marathonGoal?.marathonDate) return 0;
         return Math.max(0, Math.ceil((new Date(marathonGoal.marathonDate).getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
       }
+      case 'pace_target': return avgPaceMinKm;
       default: return 0;
     }
   };

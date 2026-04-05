@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { Card } from '@/components/ui/Card';
+import { fmtPace } from '@/lib/utils';
 import type { Goal } from '@/types/goals';
 
 interface GoalCardProps {
@@ -13,9 +14,13 @@ interface GoalCardProps {
 
 export function GoalCard({ goal, current, trend, onRemove }: GoalCardProps) {
   const [showMethod, setShowMethod] = useState(false);
-  const pct = Math.min(100, (current / goal.target) * 100);
-  const isComplete = pct >= 100;
-  const remaining = Math.max(0, goal.target - current);
+  const isPace = goal.type === 'pace_target';
+  // For pace: lower is better, so invert progress
+  const pct = isPace
+    ? (current > 0 ? Math.min(100, Math.max(0, (1 - (current - goal.target) / goal.target) * 100)) : 0)
+    : Math.min(100, (current / goal.target) * 100);
+  const isComplete = isPace ? (current > 0 && current <= goal.target) : pct >= 100;
+  const remaining = isPace ? Math.max(0, current - goal.target) : Math.max(0, goal.target - current);
 
   const labelMap: Record<string, string> = {
     weekly_km: 'Km settimanali',
@@ -47,8 +52,12 @@ export function GoalCard({ goal, current, trend, onRemove }: GoalCardProps) {
       </div>
 
       <div className="flex items-end gap-2 mb-1">
-        <span className="font-display text-3xl leading-none">{current.toFixed(1)}</span>
-        <span className="text-muted text-sm mb-0.5">/ {goal.target} {unitMap[goal.type]}</span>
+        <span className="font-display text-3xl leading-none">
+          {isPace && current > 0 ? fmtPace(current * 60) : current.toFixed(1)}
+        </span>
+        <span className="text-muted text-sm mb-0.5">
+          / {isPace ? fmtPace(goal.target * 60) : goal.target} {unitMap[goal.type]}
+        </span>
       </div>
 
       {/* Progress bar */}
@@ -78,11 +87,21 @@ export function GoalCard({ goal, current, trend, onRemove }: GoalCardProps) {
         ) : (
           <>
             <div className="text-[0.65rem] text-muted font-mono">
-              Media: <span className="text-text">{trend.weeklyAvg.toFixed(1)}</span> {unitMap[goal.type]}/sett
+              Media: <span className="text-text">{isPace && trend.weeklyAvg > 0 ? fmtPace(trend.weeklyAvg * 60) : trend.weeklyAvg.toFixed(1)}</span> {isPace ? 'min/km (ultime 10)' : `${unitMap[goal.type]}/sett`}
             </div>
-            <div className="text-[0.65rem] text-muted font-mono">
-              Mancano: <span className="text-text">{remaining.toFixed(1)}</span> {unitMap[goal.type]}
-            </div>
+            {isPace ? (
+              <div className="text-[0.65rem] font-mono">
+                {current <= goal.target ? (
+                  <span className="text-green">On target! Ritmo attuale piu veloce dell&apos;obiettivo</span>
+                ) : (
+                  <span className="text-yellow">Devi migliorare di <span className="text-text">{fmtPace(remaining * 60)}</span>/km</span>
+                )}
+              </div>
+            ) : (
+              <div className="text-[0.65rem] text-muted font-mono">
+                Mancano: <span className="text-text">{remaining.toFixed(1)}</span> {unitMap[goal.type]}
+              </div>
+            )}
             {trend.weeksToTarget !== null && trend.weeksToTarget > 0 && goal.type === 'weekly_km' ? (
               <div className="text-[0.65rem] font-mono">
                 {trend.weeklyAvg >= goal.target ? (
