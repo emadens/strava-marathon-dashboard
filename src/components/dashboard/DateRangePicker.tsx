@@ -184,9 +184,9 @@ export function DateRangePicker() {
                 Preferiti ({savedRanges.length})
               </button>
               {showSavedList && (
-                <div className="mt-2 space-y-1 max-h-32 overflow-y-auto">
+                <div className="mt-2 space-y-1 max-h-40 overflow-y-auto">
                   {savedRanges.map(r => (
-                    <div key={r.id} className="flex items-center gap-2 group">
+                    <div key={r.id} className="flex items-center gap-2">
                       <button
                         onClick={() => applySavedRange(r)}
                         className="flex-1 text-left text-xs bg-surface2 hover:bg-accent/10 px-2.5 py-1.5 rounded-lg cursor-pointer transition-all"
@@ -197,8 +197,9 @@ export function DateRangePicker() {
                         </span>
                       </button>
                       <button
-                        onClick={() => deleteSavedRange(r.id)}
-                        className="text-muted/30 hover:text-red text-xs cursor-pointer opacity-0 group-hover:opacity-100 transition-all"
+                        onClick={(e) => { e.stopPropagation(); deleteSavedRange(r.id); }}
+                        className="text-muted hover:text-red text-xs cursor-pointer transition-colors px-1.5 py-1 rounded hover:bg-red/10"
+                        title="Elimina preferito"
                       >
                         &#215;
                       </button>
@@ -282,7 +283,7 @@ export function DateRangePicker() {
               <div className="flex gap-2">
                 {rangeStart && rangeEnd && !showSaveInput && (
                   <button
-                    onClick={() => setShowSaveInput(true)}
+                    onClick={(e) => { e.stopPropagation(); setShowSaveInput(true); }}
                     className="border border-border text-muted px-3 py-1.5 rounded-lg text-xs cursor-pointer hover:border-accent hover:text-accent transition-all"
                     title="Salva questo range nei preferiti"
                   >
@@ -299,14 +300,14 @@ export function DateRangePicker() {
               </div>
             </div>
             {showSaveInput && (
-              <div className="flex gap-2 animate-fade-up">
+              <div className="flex gap-2 animate-fade-up" onClick={e => e.stopPropagation()}>
                 <input
                   value={saveName}
                   onChange={e => setSaveName(e.target.value)}
                   placeholder="Nome preferito (es. Prep. mese 1)"
                   className="flex-1 bg-surface2 border border-border rounded-lg px-2.5 py-1.5 text-xs text-text"
-                  onKeyDown={e => e.key === 'Enter' && saveRange()}
-                  autoFocus
+                  onKeyDown={e => { e.stopPropagation(); if (e.key === 'Enter') saveRange(); }}
+                  ref={el => { if (el) setTimeout(() => el.focus(), 50); }}
                 />
                 <button
                   onClick={saveRange}
