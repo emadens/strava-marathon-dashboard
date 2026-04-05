@@ -16,7 +16,7 @@ export function PlanUpload({ onExtracted }: PlanUploadProps) {
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
   const [uploadType, setUploadType] = useState<'plan' | 'session'>('plan');
-  const [inputMode, setInputMode] = useState<'ocr' | 'manual'>('ocr');
+  const [inputMode, setInputMode] = useState<'text' | 'ocr' | 'manual'>('text');
   const [analysisCount, setAnalysisCount] = useState(0);
   const [totalCost, setTotalCost] = useState(0);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -34,6 +34,15 @@ export function PlanUpload({ onExtracted }: PlanUploadProps) {
     dayOfWeek: string; type: string; distanceKm: number;
     targetPaceMinKm: string | null; intervals: string | null; notes: string | null; completed: boolean;
   }>>([]);
+
+  // Text-paste state
+  const [pastedText, setPastedText] = useState('');
+  const [parsing, setParsing] = useState(false);
+  const [parsedPreview, setParsedPreview] = useState<{ weeks: Array<{ weekNumber: number; sessions: Array<{ dayOfWeek: string; type: string; distanceKm: number; targetPaceMinKm: string | null; intervals: string | null; notes: string | null }>; weeklyTotalKm: number }> } | null>(null);
+  const [parseCost, setParseCost] = useState<number | null>(null);
+  // Editable preview state
+  const [editingWeek, setEditingWeek] = useState<number | null>(null);
+  const [editingSession, setEditingSession] = useState<{ week: number; session: number } | null>(null);
 
   useEffect(() => {
     setAnalysisCount(parseInt(localStorage.getItem(OCR_COUNT_KEY) || '0', 10));
@@ -111,6 +120,75 @@ export function PlanUpload({ onExtracted }: PlanUploadProps) {
     setPreview(null);
   };
 
+  // === TEXT PASTE HANDLERS ===
+  const handleParseText = async () => {
+    if (!pastedText.trim() || pastedText.trim().length < 20) {
+      showToast('Testo troppo corto', 'error');
+      return;
+    }
+    setParsing(true);
+    setParsedPreview(null);
+    try {
+      const res = await fetch('/api/training-plan/parse', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text: pastedText }),
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.error || 'Errore parsing');
+      }
+      const result = await res.json();
+      setParsedPreview(result.data);
+      setParseCost(result.usage?.cost || 0);
+
+      // Update cost counters
+      const newCount = analysisCount + 1;
+      const newCost = totalCost + (result.usage?.cost || 0);
+      setAnalysisCount(newCount);
+      setTotalCost(newCost);
+      localStorage.setItem(OCR_COUNT_KEY, String(newCount));
+      localStorage.setItem(OCR_COST_KEY, String(newCost));
+
+      showToast(`Piano strutturato! Costo: $${(result.usage?.cost || 0).toFixed(4)}`, 'success');
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : 'Errore parsing', 'error');
+    } finally {
+      setParsing(false);
+    }
+  };
+
+  const handleConfirmPlan = () => {
+    if (!parsedPreview?.weeks) return;
+    // Add completed: false to all sessions
+    const weeks = parsedPreview.weeks.map(w => ({
+      ...w,
+      sessions: w.sessions.map(s => ({ ...s, completed: false })),
+    }));
+    onExtracted(weeks, 'plan');
+    setParsedPreview(null);
+    setPastedText('');
+    showToast('Piano salvato!', 'success');
+  };
+
+  const updatePreviewSession = (weekIdx: number, sessionIdx: number, field: string, value: string | number) => {
+    if (!parsedPreview) return;
+    const updated = { ...parsedPreview, weeks: [...parsedPreview.weeks] };
+    updated.weeks[weekIdx] = { ...updated.weeks[weekIdx], sessions: [...updated.weeks[weekIdx].sessions] };
+    updated.weeks[weekIdx].sessions[sessionIdx] = { ...updated.weeks[weekIdx].sessions[sessionIdx], [field]: value };
+    // Recalculate weekly total
+    updated.weeks[weekIdx].weeklyTotalKm = updated.weeks[weekIdx].sessions.reduce((s, ses) => s + (Number(ses.distanceKm) || 0), 0);
+    setParsedPreview(updated);
+  };
+
+  const removePreviewSession = (weekIdx: number, sessionIdx: number) => {
+    if (!parsedPreview) return;
+    const updated = { ...parsedPreview, weeks: [...parsedPreview.weeks] };
+    updated.weeks[weekIdx] = { ...updated.weeks[weekIdx], sessions: updated.weeks[weekIdx].sessions.filter((_, i) => i !== sessionIdx) };
+    updated.weeks[weekIdx].weeklyTotalKm = updated.weeks[weekIdx].sessions.reduce((s, ses) => s + (Number(ses.distanceKm) || 0), 0);
+    setParsedPreview(updated);
+  };
+
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     const file = e.dataTransfer.files[0];
@@ -169,8 +247,16 @@ export function PlanUpload({ onExtracted }: PlanUploadProps) {
         Carica uno screenshot da Runna oppure inserisci il piano manualmente
       </div>
 
-      {/* Mode toggle: OCR vs Manual */}
+      {/* Mode toggle */}
       <div className="flex gap-2 mb-4">
+        <button
+          onClick={() => setInputMode('text')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border cursor-pointer ${
+            inputMode === 'text' ? 'border-accent text-accent bg-accent/5' : 'border-border text-muted'
+          }`}
+        >
+          Incolla testo
+        </button>
         <button
           onClick={() => setInputMode('ocr')}
           className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border cursor-pointer ${
@@ -185,11 +271,128 @@ export function PlanUpload({ onExtracted }: PlanUploadProps) {
             inputMode === 'manual' ? 'border-accent text-accent bg-accent/5' : 'border-border text-muted'
           }`}
         >
-          Inserimento manuale
+          Manuale
         </button>
       </div>
 
-      {inputMode === 'ocr' ? (
+      {inputMode === 'text' ? (
+        /* === TEXT PASTE MODE === */
+        <div>
+          {!parsedPreview ? (
+            <>
+              <p className="text-xs text-muted mb-3">
+                Incolla il testo del piano di allenamento (estratto da screenshot Runna o copiato da email/app).
+                Claude lo strutturera automaticamente in settimane e sessioni.
+              </p>
+              <textarea
+                value={pastedText}
+                onChange={e => setPastedText(e.target.value)}
+                placeholder={`Esempio:\n\nSettimana 1:\nLunedi - Easy run 8km @6:00/km\nMercoledi - Interval 6x800m @4:30\nVenerdi - Tempo run 10km @5:20/km\nDomenica - Long run 18km @6:15/km\n\nSettimana 2:\n...`}
+                rows={12}
+                className="w-full bg-surface2 border border-border rounded-xl px-4 py-3 text-sm text-text font-mono resize-y mb-4"
+              />
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted font-mono">
+                  {pastedText.length} caratteri
+                </span>
+                <button
+                  onClick={handleParseText}
+                  disabled={parsing || pastedText.trim().length < 20}
+                  className="bg-accent text-white px-6 py-2 rounded-lg text-sm font-semibold cursor-pointer transition-all hover:bg-accent2 disabled:opacity-35 disabled:pointer-events-none flex items-center gap-2"
+                >
+                  {parsing && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                  {parsing ? 'Analisi in corso...' : 'Struttura piano'}
+                </button>
+              </div>
+            </>
+          ) : (
+            /* === PREVIEW & EDIT === */
+            <div>
+              <div className="flex items-center justify-between mb-4">
+                <div>
+                  <div className="font-display text-base tracking-wide">Preview piano — {parsedPreview.weeks.length} settimane</div>
+                  {parseCost !== null && (
+                    <div className="text-[0.65rem] text-muted font-mono">Costo analisi: ${parseCost.toFixed(4)}</div>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => { setParsedPreview(null); }}
+                    className="border border-border text-muted px-3 py-1.5 rounded-lg text-xs cursor-pointer hover:border-accent transition-all"
+                  >
+                    Modifica testo
+                  </button>
+                  <button
+                    onClick={handleConfirmPlan}
+                    className="bg-accent text-white px-4 py-1.5 rounded-lg text-xs font-semibold cursor-pointer hover:bg-accent2 transition-all"
+                  >
+                    Conferma e salva
+                  </button>
+                </div>
+              </div>
+
+              <div className="max-h-[500px] overflow-y-auto space-y-3 pr-1">
+                {parsedPreview.weeks.map((week, wi) => (
+                  <div key={wi} className="bg-surface2/50 rounded-xl p-3 border border-border/50">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-medium">Settimana {week.weekNumber}</span>
+                      <span className="text-[0.65rem] text-muted font-mono">{week.weeklyTotalKm.toFixed(1)} km</span>
+                    </div>
+                    <div className="space-y-1.5">
+                      {week.sessions.map((s, si) => (
+                        <div key={si} className="flex items-center gap-2 text-xs">
+                          {editingSession?.week === wi && editingSession?.session === si ? (
+                            /* Editing mode */
+                            <div className="flex-1 grid grid-cols-5 gap-1.5">
+                              <select value={s.dayOfWeek} onChange={e => updatePreviewSession(wi, si, 'dayOfWeek', e.target.value)}
+                                className="bg-surface border border-border rounded px-1.5 py-1 text-xs text-text">
+                                {['lunedi','martedi','mercoledi','giovedi','venerdi','sabato','domenica'].map(d => (
+                                  <option key={d} value={d}>{d.slice(0,3)}</option>
+                                ))}
+                              </select>
+                              <select value={s.type} onChange={e => updatePreviewSession(wi, si, 'type', e.target.value)}
+                                className="bg-surface border border-border rounded px-1.5 py-1 text-xs text-text">
+                                {['easy','tempo','interval','long_run','recovery','rest','cross_training'].map(t => (
+                                  <option key={t} value={t}>{t}</option>
+                                ))}
+                              </select>
+                              <input type="number" step="0.1" value={s.distanceKm} onChange={e => updatePreviewSession(wi, si, 'distanceKm', parseFloat(e.target.value) || 0)}
+                                className="bg-surface border border-border rounded px-1.5 py-1 text-xs text-text" placeholder="km" />
+                              <input value={s.targetPaceMinKm || ''} onChange={e => updatePreviewSession(wi, si, 'targetPaceMinKm', e.target.value || '')}
+                                className="bg-surface border border-border rounded px-1.5 py-1 text-xs text-text" placeholder="pace" />
+                              <button onClick={() => setEditingSession(null)} className="text-green cursor-pointer">&#10003;</button>
+                            </div>
+                          ) : (
+                            /* Display mode */
+                            <>
+                              <span className="w-8 text-muted font-mono">{s.dayOfWeek.slice(0,3)}</span>
+                              <span className={`w-16 font-medium ${s.type === 'rest' ? 'text-muted/40' : 'text-text'}`}>{s.type}</span>
+                              <span className="w-12 font-mono">{s.distanceKm > 0 ? `${s.distanceKm}km` : '—'}</span>
+                              <span className="w-14 text-muted font-mono">{s.targetPaceMinKm || ''}</span>
+                              <span className="flex-1 text-muted/60 truncate">{s.intervals || s.notes || ''}</span>
+                              <button onClick={() => setEditingSession({ week: wi, session: si })} className="text-muted hover:text-accent cursor-pointer">&#9998;</button>
+                              <button onClick={() => removePreviewSession(wi, si)} className="text-muted hover:text-red cursor-pointer">&#215;</button>
+                            </>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="mt-4 flex justify-end">
+                <button
+                  onClick={handleConfirmPlan}
+                  className="bg-accent text-white px-6 py-2 rounded-lg text-sm font-semibold cursor-pointer hover:bg-accent2 transition-all"
+                >
+                  Conferma e salva ({parsedPreview.weeks.length} settimane)
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      ) : inputMode === 'ocr' ? (
         <>
           {/* Upload type toggle */}
           <div className="flex gap-2 mb-4">
