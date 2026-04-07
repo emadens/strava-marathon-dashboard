@@ -1,9 +1,5 @@
-import { kv } from '@vercel/kv';
+import Redis from 'ioredis';
 
-/**
- * All user data keys, scoped by athlete ID.
- * Format: {athleteId}:{dataType}
- */
 type DataType =
   | 'plans'
   | 'manual_matches'
@@ -14,13 +10,26 @@ type DataType =
   | 'saved_date_ranges'
   | 'ocr_count';
 
+let redis: Redis | null = null;
+
+function getRedis(): Redis {
+  if (!redis) {
+    const url = process.env.REDIS_URL;
+    if (!url) throw new Error('REDIS_URL not configured');
+    redis = new Redis(url, { maxRetriesPerRequest: 1, lazyConnect: true });
+  }
+  return redis;
+}
+
 function key(athleteId: string, type: DataType): string {
   return `user:${athleteId}:${type}`;
 }
 
 export async function kvGet<T>(athleteId: string, type: DataType): Promise<T | null> {
   try {
-    return await kv.get<T>(key(athleteId, type));
+    const raw = await getRedis().get(key(athleteId, type));
+    if (!raw) return null;
+    return JSON.parse(raw) as T;
   } catch {
     return null;
   }
@@ -28,7 +37,7 @@ export async function kvGet<T>(athleteId: string, type: DataType): Promise<T | n
 
 export async function kvSet<T>(athleteId: string, type: DataType, value: T): Promise<void> {
   try {
-    await kv.set(key(athleteId, type), value);
+    await getRedis().set(key(athleteId, type), JSON.stringify(value));
   } catch (e) {
     console.error(`KV set error for ${type}:`, e);
   }
@@ -36,7 +45,7 @@ export async function kvSet<T>(athleteId: string, type: DataType, value: T): Pro
 
 export async function kvDel(athleteId: string, type: DataType): Promise<void> {
   try {
-    await kv.del(key(athleteId, type));
+    await getRedis().del(key(athleteId, type));
   } catch (e) {
     console.error(`KV del error for ${type}:`, e);
   }
