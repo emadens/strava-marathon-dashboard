@@ -99,7 +99,7 @@ export function PacingChart({ splits }: { splits: StravaSplit[] }) {
               },
             },
           }}
-          height={180}
+          height={120}
         />
 
         {/* HR overlay as separate line chart */}
@@ -134,11 +134,14 @@ export function PacingChart({ splits }: { splits: StravaSplit[] }) {
                     formatter: (v: number | null) => v ? Math.round(v).toString() : '',
                   },
                 },
+                layout: { padding: { top: 20 } },
                 scales: {
                   y: {
-                    ticks: { color: '#666', font: { size: 10, family: 'DM Mono' }, callback: (v) => `${v} bpm` },
+                    grace: '10%',
+                    ticks: { color: '#666', font: { size: 10, family: 'DM Mono' }, callback: (v) => `${v}` },
                     grid: { color: 'rgba(255,255,255,0.04)' },
                     border: { display: false },
+                    title: { display: true, text: 'bpm', color: '#555', font: { size: 9, family: 'DM Mono' } },
                   },
                   x: {
                     ticks: { color: '#555', font: { size: 10, family: 'DM Mono' } },
