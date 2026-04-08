@@ -104,24 +104,50 @@ export function PacingChart({ splits }: { splits: StravaSplit[] }) {
           height={80}
         />
 
-        {/* HR overlay as separate line chart */}
+        {/* HR + Efficiency overlay */}
         {data.hasHR && (
           <div className="mt-4">
+            <div className="text-[0.65rem] text-muted mb-1">
+              <span style={{ color: 'rgba(255,77,0,0.8)' }}>&#9644;</span> HR (bpm)
+              <span className="mx-1.5">|</span>
+              <span style={{ color: 'rgba(57,211,83,0.8)' }}>&#9644;</span> Efficienza (pace/HR, piu alto = meno efficiente)
+            </div>
             <Line
               data={{
                 labels: data.labels,
-                datasets: [{
-                  label: 'HR',
-                  data: data.hrs,
-                  borderColor: 'rgba(255,77,0,0.7)',
-                  backgroundColor: 'rgba(255,77,0,0.05)',
-                  borderWidth: 2,
-                  fill: true,
-                  tension: 0.3,
-                  pointBackgroundColor: 'rgba(255,77,0,1)',
-                  pointRadius: 3,
-                  spanGaps: true,
-                }],
+                datasets: [
+                  {
+                    label: 'HR',
+                    data: data.hrs,
+                    borderColor: 'rgba(255,77,0,0.7)',
+                    backgroundColor: 'rgba(255,77,0,0.05)',
+                    borderWidth: 2,
+                    fill: true,
+                    tension: 0.3,
+                    pointBackgroundColor: 'rgba(255,77,0,1)',
+                    pointRadius: 3,
+                    spanGaps: true,
+                    yAxisID: 'y',
+                  },
+                  {
+                    label: 'Efficienza',
+                    // Efficiency = pace_sec / HR — normalized: multiply by 10 for readable scale
+                    data: data.paces.map((p, i) => {
+                      const hr = data.hrs[i];
+                      if (!hr || !p || p === 0) return null;
+                      return +((p * 60) / hr * 10).toFixed(1); // sec/bpm * 10
+                    }),
+                    borderColor: 'rgba(57,211,83,0.6)',
+                    borderWidth: 1.5,
+                    borderDash: [4, 3],
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: 2,
+                    pointBackgroundColor: 'rgba(57,211,83,0.8)',
+                    spanGaps: true,
+                    yAxisID: 'y2',
+                  },
+                ],
               }}
               options={{
                 responsive: true,
@@ -140,10 +166,19 @@ export function PacingChart({ splits }: { splits: StravaSplit[] }) {
                 scales: {
                   y: {
                     grace: '10%',
+                    position: 'left' as const,
                     ticks: { color: '#666', font: { size: 10, family: 'DM Mono' }, callback: (v) => `${v}` },
                     grid: { color: 'rgba(255,255,255,0.04)' },
                     border: { display: false },
-                    title: { display: true, text: 'bpm', color: '#555', font: { size: 9, family: 'DM Mono' } },
+                    title: { display: true, text: 'bpm', color: '#ff4d00', font: { size: 9, family: 'DM Mono' } },
+                  },
+                  y2: {
+                    grace: '10%',
+                    position: 'right' as const,
+                    ticks: { color: '#39d353', font: { size: 9, family: 'DM Mono' } },
+                    grid: { display: false },
+                    border: { display: false },
+                    title: { display: true, text: 'eff.', color: '#39d353', font: { size: 9, family: 'DM Mono' } },
                   },
                   x: {
                     ticks: { color: '#555', font: { size: 10, family: 'DM Mono' } },
@@ -163,7 +198,8 @@ export function PacingChart({ splits }: { splits: StravaSplit[] }) {
         <strong>Pace per km</strong>: ritmo medio di ogni chilometro (da splits Strava).
         <br />Colore: verde = veloce, arancione = lento (normalizzato sulla corsa).
         <br />Asse Y invertito: piu in alto = piu veloce.
-        {data.hasHR && <><br /><strong>HR per km</strong>: frequenza cardiaca media per ogni km. L&apos;andamento mostra come il cuore risponde allo sforzo nel tempo.</>}
+        {data.hasHR && <><br /><strong>HR per km</strong>: frequenza cardiaca media per ogni km.
+        <br /><strong>Efficienza</strong> (linea verde tratteggiata): rapporto pace/HR normalizzato. Valori piu alti = meno efficiente (cuore lavora di piu per lo stesso ritmo). Se sale durante la corsa, indica affaticamento.</>}
         <br />Hover su una barra per vedere ritmo, HR e dislivello di quel km.
       </ChartExplainer>
     </Card>

@@ -10,7 +10,9 @@ import { fmtPace } from './utils';
  */
 export function pacingIndex(splits: StravaSplit[]): number {
   if (splits.length < 2) return 0;
-  const paces = splits.map(s => s.average_speed > 0 ? 1000 / s.average_speed : 0).filter(p => p > 0);
+  // Filter out incomplete last split (<500m = end-of-run stub that skews the average)
+  const validSplits = splits.filter((s, i) => i < splits.length - 1 || s.distance >= 500);
+  const paces = validSplits.map(s => s.average_speed > 0 ? 1000 / s.average_speed : 0).filter(p => p > 0);
   if (paces.length < 2) return 0;
   const mean = paces.reduce((a, b) => a + b, 0) / paces.length;
   const variance = paces.reduce((a, p) => a + (p - mean) ** 2, 0) / paces.length;
@@ -38,10 +40,12 @@ export interface SplitAnalysis {
  * Negative = second half faster (good for marathon).
  */
 export function splitAnalysis(splits: StravaSplit[]): SplitAnalysis | null {
-  if (splits.length < 4) return null;
-  const mid = Math.floor(splits.length / 2);
-  const firstHalf = splits.slice(0, mid).filter(s => s.average_speed > 0);
-  const secondHalf = splits.slice(mid).filter(s => s.average_speed > 0);
+  // Filter out incomplete last split (<500m)
+  const valid = splits.filter((s, i) => i < splits.length - 1 || s.distance >= 500);
+  if (valid.length < 4) return null;
+  const mid = Math.floor(valid.length / 2);
+  const firstHalf = valid.slice(0, mid).filter(s => s.average_speed > 0);
+  const secondHalf = valid.slice(mid).filter(s => s.average_speed > 0);
   if (!firstHalf.length || !secondHalf.length) return null;
 
   const avgFirst = firstHalf.reduce((s, sp) => s + 1000 / sp.average_speed, 0) / firstHalf.length;
@@ -260,44 +264,63 @@ export function weeklyComparison(activities: StravaActivity[]): WeeklyComparison
 // === V2: CARDIAC EFFICIENCY ===
 
 /**
- * Compare HR at similar pace between two sets of activities.
- * Returns insight only if valid pairs found (pace within ±15%).
+ * Compare HR at similar pace between selected week and a comparable week from the past.
+ * Searches backwards through weeks (up to 8) until finding one with valid pace pairs.
+ * Returns how many weeks ago the comparison is from.
  */
 export function cardiacEfficiency(
-  thisWeekActs: StravaActivity[],
-  prevWeekActs: StravaActivity[]
-): { hrDelta: number; paceRange: string; thisHR: number; prevHR: number; pairs: number; valid: boolean } | null {
+  selectedWeekActs: StravaActivity[],
+  allActivities: StravaActivity[],
+  selectedWeekStart: Date
+): { hrDelta: number; paceRange: string; thisHR: number; prevHR: number; pairs: number; weeksAgo: number; valid: boolean } | null {
   const withHR = (acts: StravaActivity[]) => acts.filter(a => a.average_heartrate && a.average_speed > 0);
-  const thisHR = withHR(thisWeekActs);
-  const prevHR = withHR(prevWeekActs);
-  if (thisHR.length < 2 || prevHR.length < 2) return null;
+  const thisHR = withHR(selectedWeekActs);
+  if (thisHR.length < 1) return null;
 
-  // Find pairs with similar pace (±15%)
-  const pairs: { thisHR: number; prevHR: number }[] = [];
-  for (const t of thisHR) {
-    const tPace = 1000 / t.average_speed;
-    for (const p of prevHR) {
-      const pPace = 1000 / p.average_speed;
-      if (Math.abs(tPace - pPace) / pPace < 0.15) {
-        pairs.push({ thisHR: t.average_heartrate!, prevHR: p.average_heartrate! });
+  // Search backwards through weeks to find comparable HR data
+  for (let weeksBack = 1; weeksBack <= 8; weeksBack++) {
+    const prevStart = new Date(selectedWeekStart);
+    prevStart.setDate(prevStart.getDate() - weeksBack * 7);
+    const prevEnd = new Date(prevStart);
+    prevEnd.setDate(prevEnd.getDate() + 7);
+
+    const prevActs = allActivities.filter(a => {
+      const d = new Date(a.start_date);
+      return d >= prevStart && d < prevEnd;
+    });
+    const prevHRActs = withHR(prevActs);
+    if (prevHRActs.length < 1) continue;
+
+    // Find pairs with similar pace (±15%)
+    const pairs: { thisHR: number; prevHR: number }[] = [];
+    for (const t of thisHR) {
+      const tPace = 1000 / t.average_speed;
+      for (const p of prevHRActs) {
+        const pPace = 1000 / p.average_speed;
+        if (Math.abs(tPace - pPace) / pPace < 0.15) {
+          pairs.push({ thisHR: t.average_heartrate!, prevHR: p.average_heartrate! });
+        }
       }
     }
+
+    if (pairs.length < 1) continue;
+
+    const avgThisHR = pairs.reduce((s, p) => s + p.thisHR, 0) / pairs.length;
+    const avgPrevHR = pairs.reduce((s, p) => s + p.prevHR, 0) / pairs.length;
+    const avgPace = thisHR.reduce((s, a) => s + 1000 / a.average_speed, 0) / thisHR.length;
+
+    return {
+      hrDelta: avgPrevHR - avgThisHR,
+      thisHR: Math.round(avgThisHR),
+      prevHR: Math.round(avgPrevHR),
+      pairs: pairs.length,
+      weeksAgo: weeksBack,
+      paceRange: fmtPace(avgPace),
+      valid: true,
+    };
   }
 
-  if (pairs.length < 2) return null;
-
-  const avgThisHR = pairs.reduce((s, p) => s + p.thisHR, 0) / pairs.length;
-  const avgPrevHR = pairs.reduce((s, p) => s + p.prevHR, 0) / pairs.length;
-  const avgPace = thisHR.reduce((s, a) => s + 1000 / a.average_speed, 0) / thisHR.length;
-
-  return {
-    hrDelta: avgPrevHR - avgThisHR, // positive = improvement (lower HR)
-    thisHR: Math.round(avgThisHR),
-    prevHR: Math.round(avgPrevHR),
-    pairs: pairs.length,
-    paceRange: fmtPace(avgPace),
-    valid: true,
-  };
+  return null; // No comparable week found in the last 8 weeks
 }
 
 // === V2: HISTORICAL TYPE COMPARISON ===

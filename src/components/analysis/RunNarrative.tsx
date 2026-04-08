@@ -5,7 +5,7 @@ import type { Narrative } from '@/lib/run-analysis';
 const COLORS = {
   positive: { bg: 'bg-green/10', border: 'border-green/30', text: 'text-green' },
   neutral: { bg: 'bg-blue/10', border: 'border-blue/30', text: 'text-blue' },
-  warning: { bg: 'bg-yellow/10', border: 'border-yellow/30', text: 'text-yellow' },
+  warning: { bg: 'bg-accent/10', border: 'border-accent/40', text: 'text-accent' },
 };
 
 export function RunNarrative({ narratives }: { narratives: Narrative[] }) {

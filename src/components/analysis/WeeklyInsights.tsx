@@ -46,7 +46,7 @@ function calcWeekStats(activities: StravaActivity[], start: Date, end: Date, eas
     }
     return false;
   });
-  const easyPace = easyRuns.length >= 2
+  const easyPace = easyRuns.length >= 1
     ? easyRuns.reduce((s, a) => s + 1000 / a.average_speed, 0) / easyRuns.length
     : null;
 
@@ -223,7 +223,7 @@ export function WeeklyInsights({ activities, weekOffset = 0, easyActivityIds }: 
             </div>
           ) : (
             <div className="text-sm text-muted py-4">
-              Servono almeno 2 easy run (&gt;5:30/km, &lt;12km) in entrambe le settimane.
+              Servono almeno 1 easy run (&gt;5:30/km, &lt;12km) in entrambe le settimane.
             </div>
           )}
           <ChartExplainer>
@@ -239,8 +239,15 @@ export function WeeklyInsights({ activities, weekOffset = 0, easyActivityIds }: 
 
       {/* V2: Cardiac efficiency */}
       {(() => {
-        const cardiac = cardiacEfficiency(comp.selected.acts, comp.prev.acts);
+        // Calculate week start for search
+        const now = new Date();
+        const baseMonday = new Date(now);
+        baseMonday.setDate(now.getDate() - ((now.getDay() + 6) % 7) - (weekOffset || 0) * 7);
+        baseMonday.setHours(0, 0, 0, 0);
+
+        const cardiac = cardiacEfficiency(comp.selected.acts, activities, baseMonday);
         if (!cardiac?.valid) return null;
+        const weeksLabel = cardiac.weeksAgo === 1 ? 'settimana scorsa' : `${cardiac.weeksAgo} settimane fa`;
         return (
           <Card hover={false}>
             <div className="text-[0.65rem] uppercase tracking-wider text-muted mb-2">Efficienza cardiovascolare</div>
@@ -248,7 +255,7 @@ export function WeeklyInsights({ activities, weekOffset = 0, easyActivityIds }: 
               <span className={`font-display text-3xl ${cardiac.hrDelta > 0 ? 'text-green' : cardiac.hrDelta < -2 ? 'text-red' : 'text-muted'}`}>
                 {cardiac.hrDelta > 0 ? '-' : '+'}{Math.abs(cardiac.hrDelta).toFixed(0)}
               </span>
-              <span className="text-muted text-sm mb-1">bpm vs sett. precedente</span>
+              <span className="text-muted text-sm mb-1">bpm vs {weeksLabel}</span>
             </div>
             <div className="space-y-1.5 mb-2">
               <div className="flex justify-between text-xs">
@@ -256,7 +263,7 @@ export function WeeklyInsights({ activities, weekOffset = 0, easyActivityIds }: 
                 <span className="font-mono font-medium">{cardiac.thisHR} bpm</span>
               </div>
               <div className="flex justify-between text-xs">
-                <span className="text-muted">FC media settimana precedente</span>
+                <span className="text-muted">FC media {weeksLabel}</span>
                 <span className="font-mono">{cardiac.prevHR} bpm</span>
               </div>
               <div className="flex justify-between text-xs">
@@ -273,9 +280,9 @@ export function WeeklyInsights({ activities, weekOffset = 0, easyActivityIds }: 
               }
             </div>
             <ChartExplainer>
-              <strong>Efficienza cardiovascolare</strong>: confronta la FC media su corse con ritmo simile (±15%) tra le due settimane.
+              <strong>Efficienza cardiovascolare</strong>: confronta la FC media su corse con ritmo simile (±15%).
+              <br />Cerca la settimana di confronto piu recente (fino a 8 settimane indietro) con dati comparabili.
               <br />Un calo della FC a parita di ritmo indica miglioramento della fitness aerobica.
-              <br />Richiede almeno 2 corse con HR in entrambe le settimane e coppie a ritmo comparabile.
             </ChartExplainer>
           </Card>
         );
