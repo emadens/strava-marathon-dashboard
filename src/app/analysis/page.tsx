@@ -7,12 +7,14 @@ import { RunNarrative } from '@/components/analysis/RunNarrative';
 import { PacingChart } from '@/components/analysis/PacingChart';
 import { ElevationProfile } from '@/components/analysis/ElevationProfile';
 import { RunMetrics } from '@/components/analysis/RunMetrics';
+import { AdvancedMetrics } from '@/components/analysis/AdvancedMetrics';
+import { VDOTInsight } from '@/components/analysis/VDOTInsight';
 import { WeeklyInsights } from '@/components/analysis/WeeklyInsights';
 import { Toast } from '@/components/ui/Toast';
 import { useActivities } from '@/hooks/useActivities';
 import { generateNarratives } from '@/lib/run-analysis';
 import { fmtPace, fmtDateWithDay } from '@/lib/utils';
-import type { StravaDetailedActivity } from '@/types/strava';
+import type { StravaDetailedActivity, StravaBestEffort } from '@/types/strava';
 
 export default function AnalysisPage() {
   const { activities } = useActivities();
@@ -60,6 +62,25 @@ export default function AnalysisPage() {
   const splits = detail?.splits_metric ?? [];
   const selectedActivity = activities.find(a => a.id === selectedId);
   const narratives = splits.length > 0 && selectedActivity ? generateNarratives(splits, selectedActivity) : [];
+
+  // Collect all best efforts from cached details
+  const [allEfforts, setAllEfforts] = useState<StravaBestEffort[]>([]);
+  useEffect(() => {
+    const efforts: StravaBestEffort[] = [];
+    activities.forEach(a => {
+      const cached = localStorage.getItem(`activity_detail_${a.id}`);
+      if (cached) {
+        const data = JSON.parse(cached) as StravaDetailedActivity;
+        if (data.best_efforts) efforts.push(...data.best_efforts);
+      }
+    });
+    // Deduplicate by keeping best per name
+    const byName: Record<string, StravaBestEffort> = {};
+    efforts.forEach(e => {
+      if (!byName[e.name] || e.elapsed_time < byName[e.name].elapsed_time) byName[e.name] = e;
+    });
+    setAllEfforts(Object.values(byName));
+  }, [activities.length, detail]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Generate week options (last 12 weeks)
   const weekOptions = useMemo(() => {
@@ -171,6 +192,10 @@ export default function AnalysisPage() {
                   <PacingChart splits={splits} />
                   <ElevationProfile splits={splits} />
                   <RunMetrics splits={splits} />
+                  {selectedActivity && (
+                    <AdvancedMetrics splits={splits} activity={selectedActivity} allActivities={activities} />
+                  )}
+                  {allEfforts.length > 0 && <VDOTInsight allEfforts={allEfforts} />}
                 </div>
               )}
 

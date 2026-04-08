@@ -4,6 +4,7 @@ import { useMemo } from 'react';
 import { Card } from '@/components/ui/Card';
 import { ChartExplainer } from '@/components/ui/ChartExplainer';
 import { fmtPace, fmtTime } from '@/lib/utils';
+import { cardiacEfficiency } from '@/lib/run-analysis';
 import type { StravaActivity } from '@/types/strava';
 
 interface WeeklyInsightsProps {
@@ -222,6 +223,30 @@ export function WeeklyInsights({ activities, weekOffset = 0 }: WeeklyInsightsPro
           </ChartExplainer>
         </Card>
       </div>
+
+      {/* V2: Cardiac efficiency */}
+      {(() => {
+        const cardiac = cardiacEfficiency(comp.selected.acts, comp.prev.acts);
+        if (!cardiac?.valid) return null;
+        return (
+          <Card hover={false}>
+            <div className="text-[0.65rem] uppercase tracking-wider text-muted mb-2">Efficienza cardiovascolare</div>
+            <div className={`text-sm font-medium ${cardiac.hrDelta > 0 ? 'text-green' : cardiac.hrDelta < -2 ? 'text-yellow' : 'text-muted'}`}>
+              {cardiac.hrDelta > 0
+                ? `A parita di ~${cardiac.paceRange}/km, il tuo cuore batte ${cardiac.hrDelta.toFixed(0)} bpm in meno rispetto alla settimana precedente`
+                : cardiac.hrDelta < -2
+                  ? `A parita di ~${cardiac.paceRange}/km, il tuo cuore batte ${Math.abs(cardiac.hrDelta).toFixed(0)} bpm in piu rispetto alla settimana precedente`
+                  : `Efficienza cardiovascolare stabile a ~${cardiac.paceRange}/km`
+              }
+            </div>
+            <ChartExplainer>
+              <strong>Efficienza cardiovascolare</strong>: confronta la FC media su corse con ritmo simile (±15%) tra le due settimane.
+              <br />Un calo della FC a parita di ritmo indica miglioramento della fitness aerobica.
+              <br />Richiede almeno 2 corse con HR in entrambe le settimane e coppie a ritmo comparabile.
+            </ChartExplainer>
+          </Card>
+        );
+      })()}
 
       {/* Activity list for the week */}
       {s.acts.length > 0 && (

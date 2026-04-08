@@ -256,3 +256,181 @@ export function weeklyComparison(activities: StravaActivity[]): WeeklyComparison
     avg4Weeks: avg4,
   };
 }
+
+// === V2: CARDIAC EFFICIENCY ===
+
+/**
+ * Compare HR at similar pace between two sets of activities.
+ * Returns insight only if valid pairs found (pace within ±15%).
+ */
+export function cardiacEfficiency(
+  thisWeekActs: StravaActivity[],
+  prevWeekActs: StravaActivity[]
+): { hrDelta: number; paceRange: string; valid: boolean } | null {
+  const withHR = (acts: StravaActivity[]) => acts.filter(a => a.average_heartrate && a.average_speed > 0);
+  const thisHR = withHR(thisWeekActs);
+  const prevHR = withHR(prevWeekActs);
+  if (thisHR.length < 2 || prevHR.length < 2) return null;
+
+  // Find pairs with similar pace (±15%)
+  const pairs: { thisHR: number; prevHR: number }[] = [];
+  for (const t of thisHR) {
+    const tPace = 1000 / t.average_speed;
+    for (const p of prevHR) {
+      const pPace = 1000 / p.average_speed;
+      if (Math.abs(tPace - pPace) / pPace < 0.15) {
+        pairs.push({ thisHR: t.average_heartrate!, prevHR: p.average_heartrate! });
+      }
+    }
+  }
+
+  if (pairs.length < 2) return null;
+
+  const avgThisHR = pairs.reduce((s, p) => s + p.thisHR, 0) / pairs.length;
+  const avgPrevHR = pairs.reduce((s, p) => s + p.prevHR, 0) / pairs.length;
+  const avgPace = thisHR.reduce((s, a) => s + 1000 / a.average_speed, 0) / thisHR.length;
+
+  return {
+    hrDelta: avgPrevHR - avgThisHR, // positive = improvement (lower HR)
+    paceRange: fmtPace(avgPace),
+    valid: true,
+  };
+}
+
+// === V2: HISTORICAL TYPE COMPARISON ===
+
+export interface TypeComparison {
+  type: string;
+  currentPace: number;
+  historicalAvgPace: number;
+  delta: number; // sec/km difference (positive = faster than historical)
+  currentHR: number | null;
+  historicalAvgHR: number | null;
+  sampleSize: number;
+}
+
+/**
+ * Compare an activity against historical average for its type.
+ * Type determined by plan association or pace threshold.
+ */
+export function compareVsHistorical(
+  activity: StravaActivity,
+  allActivities: StravaActivity[],
+  activityType?: string
+): TypeComparison | null {
+  const type = activityType || classifyRunType(activity);
+  if (!type) return null;
+
+  // Get same-type activities from last 8 weeks (excluding current)
+  const eightWeeksAgo = new Date();
+  eightWeeksAgo.setDate(eightWeeksAgo.getDate() - 56);
+
+  const historical = allActivities.filter(a => {
+    if (a.id === activity.id) return false;
+    if (new Date(a.start_date) < eightWeeksAgo) return false;
+    return classifyRunType(a) === type;
+  });
+
+  if (historical.length < 3) return null; // Need at least 3 for meaningful comparison
+
+  const histPaces = historical.filter(a => a.average_speed > 0);
+  const avgHistPace = histPaces.reduce((s, a) => s + 1000 / a.average_speed, 0) / histPaces.length;
+  const currentPace = 1000 / activity.average_speed;
+
+  const histHRActs = historical.filter(a => a.average_heartrate);
+  const avgHistHR = histHRActs.length >= 3
+    ? histHRActs.reduce((s, a) => s + (a.average_heartrate ?? 0), 0) / histHRActs.length
+    : null;
+
+  return {
+    type,
+    currentPace,
+    historicalAvgPace: avgHistPace,
+    delta: avgHistPace - currentPace, // positive = faster than historical
+    currentHR: activity.average_heartrate,
+    historicalAvgHR: avgHistHR,
+    sampleSize: historical.length,
+  };
+}
+
+export function classifyRunType(a: StravaActivity): string {
+  const paceMinKm = a.average_speed > 0 ? 1000 / a.average_speed / 60 : 0;
+  const distKm = a.distance / 1000;
+  if (distKm >= 15) return 'long_run';
+  if (paceMinKm < 5.5 && distKm >= 5) return 'quality';
+  if (paceMinKm >= 5.5 && distKm < 12) return 'easy';
+  return 'other';
+}
+
+const TYPE_LABELS: Record<string, string> = {
+  easy: 'Easy Run',
+  quality: 'Quality (Tempo/Interval)',
+  long_run: 'Long Run',
+  other: 'Altro',
+};
+
+export function typeLabel(type: string): string {
+  return TYPE_LABELS[type] || type;
+}
+
+// === V3: VDOT TREND ===
+
+export interface VDOTTrend {
+  currentVDOT: number;
+  previousVDOT: number | null;
+  delta: number;
+  paceDelta: number; // sec/km improvement in marathon pace
+  basedOn: string; // e.g. "10K in 59:17"
+}
+
+/**
+ * Calculate VDOT trend by comparing best efforts between two periods.
+ * Requires cached activity details with best_efforts.
+ */
+export function vdotTrend(
+  recentBestEfforts: Array<{ name: string; elapsed_time: number; distance: number; start_date: string }>,
+  olderBestEfforts: Array<{ name: string; elapsed_time: number; distance: number; start_date: string }>
+): VDOTTrend | null {
+  // Import inline to avoid circular dependency issues
+  const { calculateVDOT, predictRaceTime } = require('./vdot');
+
+  // Find the best recent effort (prefer longer distances)
+  const priority = ['marathon', 'half-marathon', '10k', '5k', '1 mile', '1k'];
+  let bestRecent: typeof recentBestEfforts[0] | null = null;
+  for (const name of priority) {
+    const match = recentBestEfforts.find(e => e.name.toLowerCase().replace('-', ' ') === name.replace('-', ' '));
+    if (match) { bestRecent = match; break; }
+  }
+  if (!bestRecent) bestRecent = recentBestEfforts[0];
+  if (!bestRecent) return null;
+
+  const currentVDOT = calculateVDOT(bestRecent.distance, bestRecent.elapsed_time);
+
+  // Find equivalent older effort
+  let bestOlder: typeof olderBestEfforts[0] | null = null;
+  const olderSameType = olderBestEfforts.filter(e =>
+    e.name.toLowerCase() === bestRecent!.name.toLowerCase()
+  );
+  if (olderSameType.length > 0) {
+    bestOlder = olderSameType.reduce((a, b) => a.elapsed_time < b.elapsed_time ? a : b);
+  }
+
+  const previousVDOT = bestOlder ? calculateVDOT(bestOlder.distance, bestOlder.elapsed_time) : null;
+  const delta = previousVDOT ? currentVDOT - previousVDOT : 0;
+
+  // Calculate marathon pace delta
+  const currentMarathon = predictRaceTime(currentVDOT, 42195);
+  const prevMarathon = previousVDOT ? predictRaceTime(previousVDOT, 42195) : currentMarathon;
+  const paceDelta = (prevMarathon / 42.195) - (currentMarathon / 42.195); // sec/km improvement
+
+  const durationMin = Math.floor(bestRecent.elapsed_time / 60);
+  const durationSec = bestRecent.elapsed_time % 60;
+
+  return {
+    currentVDOT,
+    previousVDOT,
+    delta,
+    paceDelta,
+    basedOn: `${bestRecent.name} in ${durationMin}:${String(Math.round(durationSec)).padStart(2, '0')}`,
+  };
+}
