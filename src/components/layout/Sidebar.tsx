@@ -7,7 +7,7 @@ const navItems = [
   { href: '/', label: 'Dashboard', icon: '◉' },
   { href: '/goals', label: 'Obiettivi', icon: '◎' },
   { href: '/splits', label: 'Split', icon: '⏱' },
-  { href: '/maps', label: 'Mappe', icon: '◈' },
+  { href: '/analysis', label: 'Analisi', icon: '◈' },
   { href: '/training-plan', label: 'Piano', icon: '▤' },
 ];
 
