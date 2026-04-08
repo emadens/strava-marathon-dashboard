@@ -95,7 +95,7 @@ export function ElevationProfile({ splits }: { splits: StravaSplit[] }) {
             },
           },
         }}
-        height={100}
+        height={60}
       />
 
       <ChartExplainer>

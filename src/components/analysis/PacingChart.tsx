@@ -61,12 +61,14 @@ export function PacingChart({ splits }: { splits: StravaSplit[] }) {
           options={{
             responsive: true,
             animation: { duration: 400 },
+            layout: { padding: { top: 25 } },
             plugins: {
               legend: { display: false },
               datalabels: {
+                display: true,
                 color: '#999',
-                anchor: 'end',
-                align: 'top',
+                anchor: 'end' as const,
+                align: 'top' as const,
                 font: { size: 9, family: 'DM Mono' },
                 formatter: (v: number) => v > 0 ? fmtPace(v * 60) : '',
               },
@@ -99,7 +101,7 @@ export function PacingChart({ splits }: { splits: StravaSplit[] }) {
               },
             },
           }}
-          height={120}
+          height={80}
         />
 
         {/* HR overlay as separate line chart */}
