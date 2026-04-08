@@ -10,9 +10,11 @@ import type { StravaActivity } from '@/types/strava';
 interface WeeklyInsightsProps {
   activities: StravaActivity[];
   weekOffset?: number;
+  /** Set of activity IDs confirmed as "easy" from plan associations */
+  easyActivityIds?: Set<number>;
 }
 
-function calcWeekStats(activities: StravaActivity[], start: Date, end: Date) {
+function calcWeekStats(activities: StravaActivity[], start: Date, end: Date, easyIds?: Set<number>) {
   const acts = activities.filter(a => {
     const d = new Date(a.start_date);
     return d >= start && d < end;
@@ -33,18 +35,25 @@ function calcWeekStats(activities: StravaActivity[], start: Date, end: Date) {
     ? hrActs.reduce((s, a) => s + (a.average_heartrate ?? 0), 0) / hrActs.length
     : null;
 
+  // Easy runs: from plan confirmations first, then fallback to pace/distance
   const easyRuns = acts.filter(a => {
-    const pace = a.average_speed > 0 ? 1000 / a.average_speed / 60 : 0;
-    return pace > 5.5 && a.distance < 12000;
+    // If we have plan data, check if this activity is confirmed as easy
+    if (easyIds && easyIds.has(a.id)) return true;
+    // Fallback: pace > 5:30/km and < 12km
+    if (!easyIds || easyIds.size === 0) {
+      const pace = a.average_speed > 0 ? 1000 / a.average_speed / 60 : 0;
+      return pace > 5.5 && a.distance < 12000;
+    }
+    return false;
   });
   const easyPace = easyRuns.length >= 2
     ? easyRuns.reduce((s, a) => s + 1000 / a.average_speed, 0) / easyRuns.length
     : null;
 
-  return { km, runs, totalTime, totalElev, longestRun, avgPace, avgHR, easyPace, acts };
+  return { km, runs, totalTime, totalElev, longestRun, avgPace, avgHR, easyPace, easyCount: easyRuns.length, acts };
 }
 
-export function WeeklyInsights({ activities, weekOffset = 0 }: WeeklyInsightsProps) {
+export function WeeklyInsights({ activities, weekOffset = 0, easyActivityIds }: WeeklyInsightsProps) {
   const comp = useMemo(() => {
     const now = new Date();
     const baseMonday = new Date(now);
@@ -60,8 +69,8 @@ export function WeeklyInsights({ activities, weekOffset = 0 }: WeeklyInsightsPro
     const fourWeeksAgo = new Date(baseMonday);
     fourWeeksAgo.setDate(baseMonday.getDate() - 28);
 
-    const selected = calcWeekStats(activities, baseMonday, baseSunday);
-    const prev = calcWeekStats(activities, prevMonday, baseMonday);
+    const selected = calcWeekStats(activities, baseMonday, baseSunday, easyActivityIds);
+    const prev = calcWeekStats(activities, prevMonday, baseMonday, easyActivityIds);
 
     const fourWeekActs = activities.filter(a => {
       const d = new Date(a.start_date);
@@ -80,7 +89,7 @@ export function WeeklyInsights({ activities, weekOffset = 0 }: WeeklyInsightsPro
       ' — ' + new Date(baseSunday.getTime() - 86400000).toLocaleDateString('it', { day: '2-digit', month: 'short' });
 
     return { selected, prev, avg4Km, avg4Easy, weekLabel };
-  }, [activities, weekOffset]);
+  }, [activities, weekOffset, easyActivityIds]);
 
   const s = comp.selected;
   const p = comp.prev;
@@ -218,7 +227,11 @@ export function WeeklyInsights({ activities, weekOffset = 0 }: WeeklyInsightsPro
             </div>
           )}
           <ChartExplainer>
-            <strong>Ritmo easy run</strong>: media del ritmo delle corse facili (&gt;5:30/km, &lt;12km).
+            <strong>Ritmo easy run</strong>: media del ritmo delle corse easy.
+            <br />{easyActivityIds && easyActivityIds.size > 0
+              ? 'Classificazione basata sulle associazioni confermate nel piano di allenamento (sessioni Easy/Recovery).'
+              : 'Classificazione automatica: corse con ritmo >5:30/km e distanza <12km.'
+            }
             <br />Un miglioramento del ritmo easy a HR simile indica miglioramento fitness aerobica.
           </ChartExplainer>
         </Card>
@@ -231,12 +244,32 @@ export function WeeklyInsights({ activities, weekOffset = 0 }: WeeklyInsightsPro
         return (
           <Card hover={false}>
             <div className="text-[0.65rem] uppercase tracking-wider text-muted mb-2">Efficienza cardiovascolare</div>
-            <div className={`text-sm font-medium ${cardiac.hrDelta > 0 ? 'text-green' : cardiac.hrDelta < -2 ? 'text-yellow' : 'text-muted'}`}>
+            <div className="flex items-end gap-3 mb-2">
+              <span className={`font-display text-3xl ${cardiac.hrDelta > 0 ? 'text-green' : cardiac.hrDelta < -2 ? 'text-red' : 'text-muted'}`}>
+                {cardiac.hrDelta > 0 ? '-' : '+'}{Math.abs(cardiac.hrDelta).toFixed(0)}
+              </span>
+              <span className="text-muted text-sm mb-1">bpm vs sett. precedente</span>
+            </div>
+            <div className="space-y-1.5 mb-2">
+              <div className="flex justify-between text-xs">
+                <span className="text-muted">FC media questa settimana</span>
+                <span className="font-mono font-medium">{cardiac.thisHR} bpm</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-muted">FC media settimana precedente</span>
+                <span className="font-mono">{cardiac.prevHR} bpm</span>
+              </div>
+              <div className="flex justify-between text-xs">
+                <span className="text-muted">A ritmo comparabile di</span>
+                <span className="font-mono">~{cardiac.paceRange}/km</span>
+              </div>
+            </div>
+            <div className={`text-xs font-medium ${cardiac.hrDelta > 0 ? 'text-green' : cardiac.hrDelta < -2 ? 'text-yellow' : 'text-muted'}`}>
               {cardiac.hrDelta > 0
-                ? `A parita di ~${cardiac.paceRange}/km, il tuo cuore batte ${cardiac.hrDelta.toFixed(0)} bpm in meno rispetto alla settimana precedente`
+                ? `Miglioramento: cuore piu efficiente a parita di ritmo`
                 : cardiac.hrDelta < -2
-                  ? `A parita di ~${cardiac.paceRange}/km, il tuo cuore batte ${Math.abs(cardiac.hrDelta).toFixed(0)} bpm in piu rispetto alla settimana precedente`
-                  : `Efficienza cardiovascolare stabile a ~${cardiac.paceRange}/km`
+                  ? `Attenzione: cuore sotto piu stress a parita di ritmo`
+                  : `Stabile — nessun cambiamento significativo`
               }
             </div>
             <ChartExplainer>

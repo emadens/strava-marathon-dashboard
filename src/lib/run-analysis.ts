@@ -266,7 +266,7 @@ export function weeklyComparison(activities: StravaActivity[]): WeeklyComparison
 export function cardiacEfficiency(
   thisWeekActs: StravaActivity[],
   prevWeekActs: StravaActivity[]
-): { hrDelta: number; paceRange: string; valid: boolean } | null {
+): { hrDelta: number; paceRange: string; thisHR: number; prevHR: number; pairs: number; valid: boolean } | null {
   const withHR = (acts: StravaActivity[]) => acts.filter(a => a.average_heartrate && a.average_speed > 0);
   const thisHR = withHR(thisWeekActs);
   const prevHR = withHR(prevWeekActs);
@@ -292,6 +292,9 @@ export function cardiacEfficiency(
 
   return {
     hrDelta: avgPrevHR - avgThisHR, // positive = improvement (lower HR)
+    thisHR: Math.round(avgThisHR),
+    prevHR: Math.round(avgPrevHR),
+    pairs: pairs.length,
     paceRange: fmtPace(avgPace),
     valid: true,
   };

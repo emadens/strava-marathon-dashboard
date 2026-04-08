@@ -12,12 +12,31 @@ import { VDOTInsight } from '@/components/analysis/VDOTInsight';
 import { WeeklyInsights } from '@/components/analysis/WeeklyInsights';
 import { Toast } from '@/components/ui/Toast';
 import { useActivities } from '@/hooks/useActivities';
+import { useTrainingPlan } from '@/hooks/useTrainingPlan';
+import { usePlanMatches } from '@/hooks/usePlanMatches';
 import { generateNarratives } from '@/lib/run-analysis';
 import { fmtPace, fmtDateWithDay } from '@/lib/utils';
 import type { StravaDetailedActivity, StravaBestEffort } from '@/types/strava';
 
 export default function AnalysisPage() {
   const { activities } = useActivities();
+  const { currentPlan } = useTrainingPlan();
+  const planWeeks = currentPlan?.weeks ?? [];
+  const { getMatchResult } = usePlanMatches(planWeeks, activities);
+
+  // Build set of easy activity IDs from confirmed plan matches
+  const easyActivityIds = useMemo(() => {
+    const ids = new Set<number>();
+    planWeeks.forEach((week, wi) => {
+      week.sessions.forEach((s, si) => {
+        if (s.type === 'easy' || s.type === 'recovery') {
+          const match = getMatchResult(wi, si, s);
+          if (match?.isManual) ids.add(match.activity.id);
+        }
+      });
+    });
+    return ids;
+  }, [planWeeks, getMatchResult]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [detail, setDetail] = useState<StravaDetailedActivity | null>(null);
   const [loading, setLoading] = useState(false);
@@ -187,7 +206,7 @@ export default function AnalysisPage() {
               )}
 
               {!loading && splits.length > 0 && (
-                <div className="space-y-6">
+                <div className="space-y-6" key={selectedId}>
                   <RunNarrative narratives={narratives} />
                   <PacingChart splits={splits} />
                   <ElevationProfile splits={splits} />
@@ -228,7 +247,7 @@ export default function AnalysisPage() {
                 </div>
               </div>
 
-              <WeeklyInsights activities={activities} weekOffset={selectedWeekOffset} />
+              <WeeklyInsights activities={activities} weekOffset={selectedWeekOffset} easyActivityIds={easyActivityIds} />
             </div>
           )}
         </main>
